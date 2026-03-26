@@ -1,0 +1,5 @@
+import CertificationsClient from './certifications-client';
+
+export default function CertificationsPage() {
+  return <CertificationsClient />;
+}

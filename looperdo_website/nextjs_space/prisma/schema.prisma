@@ -1,0 +1,124 @@
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+    output = "/home/ubuntu/looperdo_website/nextjs_space/node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String    @id @default(cuid())
+  name           String?
+  email          String    @unique
+  emailVerified  DateTime?
+  hashedPassword String?
+  image          String?
+  role           String    @default("user")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  accounts       Account[]
+  sessions       Session[]
+  profile        StudentProfile?
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model StudentProfile {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readinessScore      Float    @default(0)
+  totalTestsTaken     Int      @default(0)
+  totalStudyHours     Float    @default(0)
+  currentStreak       Int      @default(0)
+  longestStreak       Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  certifications      CertificationProgress[]
+  testHistories       TestHistory[]
+  workbooks           Workbook[]
+}
+
+model CertificationProgress {
+  id                String   @id @default(cuid())
+  profileId         String
+  profile           StudentProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  certificationSlug String
+  certificationName String
+  readinessScore    Float    @default(0)
+  testsCompleted    Int      @default(0)
+  topicScores       Json     @default("{}")
+  startedAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([profileId, certificationSlug])
+}
+
+model TestHistory {
+  id                String   @id @default(cuid())
+  profileId         String
+  profile           StudentProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  certificationSlug String
+  score             Float
+  totalQuestions    Int
+  correctAnswers    Int
+  difficulty        String   @default("medium")
+  topicBreakdown    Json     @default("{}")
+  diagnosis         Json     @default("{}")
+  completedAt       DateTime @default(now())
+}
+
+model Workbook {
+  id                String   @id @default(cuid())
+  profileId         String
+  profile           StudentProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  certificationSlug String
+  title             String
+  content           Json     @default("{}")
+  generatedAt       DateTime @default(now())
+}
+
+model ContactSubmission {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  message   String   @db.Text
+  status    String   @default("new")
+  createdAt DateTime @default(now())
+}

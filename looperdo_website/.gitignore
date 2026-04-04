@@ -1,33 +1,16 @@
-# Operating System Files
-.DS_Store
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-
-# IDE/Editor Files
-.idea/
-.vscode/
-*.suo
-*.user
-*.config.user
-*.sln.workspace
-
-# Build/Compilation Artifacts
-/build/
-/dist/
-/target/
-*.class
-*.dll
-*.exe
-*.log
-*.lock.json
-*.cache
-
-# Dependencies (language specific, but common names)
-/node_modules/
-/vendor/
-/venv/
+# Dependencies
+node_modules/
+**/node_modules/
+.pnp
+.pnp.js
 
 # Environment Variables
 .env
 .env.local
+.env.*.local
+
+# Next.js build output
+.next/
+**/ .next/
+out/
+build/

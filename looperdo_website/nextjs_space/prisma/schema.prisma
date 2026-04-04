@@ -1,43 +1,30 @@
-generator client {
-    provider = "prisma-client-js"
-    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
-    output = "/home/ubuntu/looperdo_website/nextjs_space/node_modules/.prisma/client"
-}
-
 datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-model User {
-  id             String    @id @default(cuid())
-  name           String?
-  email          String    @unique
-  emailVerified  DateTime?
-  hashedPassword String?
-  image          String?
-  role           String    @default("user")
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  accounts       Account[]
-  sessions       Session[]
-  profile        StudentProfile?
+generator client {
+  provider = "prisma-client-js"
 }
 
+// --------------------------------------
+// NEXTAUTH STANDARD MODELS
+// --------------------------------------
 model Account {
-  id                String  @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String? @db.Text
-  session_state     String?
-  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -58,67 +45,46 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-model StudentProfile {
+// --------------------------------------
+// BUSINESS & USER MODELS
+// --------------------------------------
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  
+  // Custom Business Fields
+  subscriptionTier String   @default("FREE") // FREE, PRO, ENTERPRISE
+  countryCode      String?  // e.g., IN, US
+  currency         String?  // e.g., INR, USD
+
+  accounts      Account[]
+  sessions      Session[]
+  testAttempts  TestAttempt[]
+  workbooks     Workbook[]
+}
+
+model TestAttempt {
   id                  String   @id @default(cuid())
-  userId              String   @unique
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  readinessScore      Float    @default(0)
-  totalTestsTaken     Int      @default(0)
-  totalStudyHours     Float    @default(0)
-  currentStreak       Int      @default(0)
-  longestStreak       Int      @default(0)
+  userId              String
+  certification       String   // e.g., "AWS-SAA"
+  score               Float    // Raw score (e.g., 8/10)
+  readinessPercentage Float    // Calculated readiness (e.g., 80.5)
+  weakTopics          String[] // Array of weak topics from AI
   createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  certifications      CertificationProgress[]
-  testHistories       TestHistory[]
-  workbooks           Workbook[]
-}
 
-model CertificationProgress {
-  id                String   @id @default(cuid())
-  profileId         String
-  profile           StudentProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  certificationSlug String
-  certificationName String
-  readinessScore    Float    @default(0)
-  testsCompleted    Int      @default(0)
-  topicScores       Json     @default("{}")
-  startedAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  @@unique([profileId, certificationSlug])
-}
-
-model TestHistory {
-  id                String   @id @default(cuid())
-  profileId         String
-  profile           StudentProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  certificationSlug String
-  score             Float
-  totalQuestions    Int
-  correctAnswers    Int
-  difficulty        String   @default("medium")
-  topicBreakdown    Json     @default("{}")
-  diagnosis         Json     @default("{}")
-  completedAt       DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Workbook {
-  id                String   @id @default(cuid())
-  profileId         String
-  profile           StudentProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  certificationSlug String
-  title             String
-  content           Json     @default("{}")
-  generatedAt       DateTime @default(now())
-}
+  id            String   @id @default(cuid())
+  userId        String
+  certification String
+  content       String   @db.Text // AI generated markdown theory & mindmaps
+  youtubeLinks  Json?    // Store retrieved video links
+  createdAt     DateTime @default(now())
 
-model ContactSubmission {
-  id        String   @id @default(cuid())
-  name      String
-  email     String
-  subject   String
-  message   String   @db.Text
-  status    String   @default("new")
-  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

@@ -1,7 +1,7 @@
 import { NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
-import { prisma } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 export const authOptions: NextAuthOptions = {
   // 1. Connect NextAuth to our Neon Database
@@ -23,7 +23,7 @@ export const authOptions: NextAuthOptions = {
     signIn: '/login', 
   },
   
-  // 5. Token & Session Management (Crucial for our Business Logic)
+  // 5. Token & Session Management
   callbacks: {
     async jwt({ token, user }: any) {
       if (user) {
@@ -41,7 +41,7 @@ export const authOptions: NextAuthOptions = {
           select: { subscriptionTier: true, countryCode: true }
         });
 
-        // Attach them to the active session so the UI can lock/unlock Pro features
+        // Attach them to the active session
         if (dbUser) {
           (session.user as any).subscriptionTier = dbUser.subscriptionTier;
           (session.user as any).countryCode = dbUser.countryCode;

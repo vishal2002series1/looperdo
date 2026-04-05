@@ -3,20 +3,32 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { BarChart3, BookOpen, FileText, Flame, Clock, Trophy, TrendingUp, ArrowRight, Loader2, X, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FileText, BookOpen, Flame, Clock, Trophy, TrendingUp, ArrowRight, Loader2, X, CheckCircle2 } from 'lucide-react';
 import ReadinessGauge from '@/components/readiness-gauge';
 import SectionReveal from '@/components/section-reveal';
 import TopicChart from './topic-chart';
-import { mockTestQuestions, mockWorkbook } from '@/lib/mock-data';
-import { AnimatePresence } from 'framer-motion';
+import { mockWorkbook } from '@/lib/mock-data';
+
+// --- NEW: Loading Animation Messages (No "Agent" word) ---
+const LOADING_MESSAGES = [
+  "⏳ Analyzing your historical weaknesses...",
+  "🔍 Checking the database for existing matches...",
+  "✍️ Drafting highly calibrated questions...",
+  "🧐 Running quality assurance and formatting checks...",
+  "🔄 Refining the question batch..."
+];
 
 export default function DashboardClient() {
   const { data: session, status } = useSession() || {};
   const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [showTestModal, setShowTestModal] = useState(false);
+  
+  // --- NEW: Test Generation State ---
+  const [isGeneratingTest, setIsGeneratingTest] = useState(false);
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+
   const [showWorkbookModal, setShowWorkbookModal] = useState(false);
 
   useEffect(() => {
@@ -35,6 +47,19 @@ export default function DashboardClient() {
     }
   }, [status]);
 
+  // --- NEW: The Rotating Text Effect ---
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isGeneratingTest) {
+      interval = setInterval(() => {
+        setLoadingMessageIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
+      }, 2500);
+    } else {
+      setLoadingMessageIndex(0);
+    }
+    return () => clearInterval(interval);
+  }, [isGeneratingTest]);
+
   if (status === 'loading' || loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -50,8 +75,69 @@ export default function DashboardClient() {
   const activeCert = certs?.[0] ?? null;
   const topicScores = activeCert?.topicScores ?? {};
 
+  // --- NEW: The Live API Call Function ---
+  // --- NEW: The Live API Call Function ---
+  const handleGenerateRealTest = async () => {
+    setIsGeneratingTest(true);
+    try {
+      const response = await fetch('/api/generate-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          certificationSlug: activeCert?.certificationName || 'UPSC', 
+          questionCount: 5,
+          difficulty: null // Triggers adaptive auto-mode
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.questions?.length > 0) {
+        // Store the live questions in sessionStorage so the test page can grab them
+        sessionStorage.setItem('activeTest', JSON.stringify({
+           testId: data.testId,
+           certificationSlug: data.certificationSlug,
+           questions: data.questions,
+           timeLimit: data.timeLimit
+        }));
+
+        // Route the user to the assessment interface
+        router.push(`/assessment/${data.testId}`);
+        
+      } else {
+        const errMsg = data.error ?? "Unknown error from AI engine";
+        console.error("Failed:", errMsg);
+        alert(`Generation Failed: ${errMsg}`);
+      }
+    } catch (error) {
+      console.error("Network error:", error);
+      alert("Network error connecting to AI engine.");
+    } finally {
+      setIsGeneratingTest(false);
+    }
+  };
+
   return (
-    <div className="bg-gray-50/50 min-h-screen">
+    <div className="bg-gray-50/50 min-h-screen relative">
+      
+      {/* --- NEW: Full Screen Loading Overlay for Test Generation --- */}
+      <AnimatePresence>
+        {isGeneratingTest && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center"
+          >
+            <Loader2 className="w-12 h-12 animate-spin text-[#2563eb] mb-6" />
+            <h2 className="text-2xl font-bold text-[#1e3a5f] mb-2">Building Your Adaptive Test</h2>
+            <p className="text-lg text-blue-600 font-medium animate-pulse transition-opacity duration-500 text-center px-4 max-w-md">
+              {LOADING_MESSAGES[loadingMessageIndex]}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="mx-auto max-w-[1200px] px-4 py-8">
         {/* Welcome */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
@@ -120,8 +206,20 @@ export default function DashboardClient() {
               <div className="bg-white rounded-lg p-6 shadow-sm">
                 <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Quick Actions</h2>
                 <div className="space-y-2">
+                  {/* --- NEW: Changed the first action to trigger the real API --- */}
+                  <button
+                    onClick={handleGenerateRealTest}
+                    disabled={isGeneratingTest}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left group disabled:opacity-50"
+                  >
+                    <div className="w-8 h-8 rounded-md bg-[#2563eb] flex items-center justify-center">
+                      <FileText className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="text-sm font-medium text-[#1e3a5f] flex-1">Generate Adaptive Test</span>
+                    <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-[#2563eb] transition-colors" />
+                  </button>
+
                   {[
-                    { label: 'Generate New Test', icon: FileText, color: 'bg-[#2563eb]', action: () => setShowTestModal(true) },
                     { label: 'View Workbook', icon: BookOpen, color: 'bg-[#7c3aed]', action: () => setShowWorkbookModal(true) },
                     { label: 'Track Progress', icon: TrendingUp, color: 'bg-[#10b981]', action: () => { const el = document.getElementById('topic-section'); el?.scrollIntoView?.({ behavior: 'smooth' }); } },
                   ].map((action: any, i: number) => {
@@ -195,50 +293,6 @@ export default function DashboardClient() {
           </div>
         </div>
       </div>
-
-      {/* Generate Test Modal */}
-      <AnimatePresence>
-        {showTestModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
-            onClick={() => setShowTestModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6"
-              onClick={(e: any) => e?.stopPropagation?.()}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-[#1e3a5f]">Sample Adaptive Test</h2>
-                <button onClick={() => setShowTestModal(false)} className="p-1 hover:bg-gray-100 rounded"><X className="w-5 h-5 text-gray-400" /></button>
-              </div>
-              <p className="text-sm text-gray-500 mb-4">Here&apos;s a preview of adaptive test questions generated for AWS SAA:</p>
-              <div className="space-y-4">
-                {(mockTestQuestions ?? []).slice(0, 3).map((q: any, i: number) => (
-                  <div key={i} className="p-4 bg-gray-50 rounded-lg">
-                    <p className="text-sm font-medium text-[#1e3a5f] mb-2">{i + 1}. {q?.question ?? ''}</p>
-                    <div className="space-y-1.5">
-                      {(q?.options ?? []).map((opt: string, j: number) => (
-                        <label key={j} className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer hover:text-[#1e3a5f]">
-                          <input type="radio" name={`q-${i}`} className="mt-0.5" />
-                          <span>{opt ?? ''}</span>
-                        </label>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-[#2563eb] mt-2">Topic: {q?.topic ?? ''} · Difficulty: {q?.difficulty ?? ''}</p>
-                  </div>
-                ))}
-              </div>
-              <p className="text-xs text-gray-400 mt-4 text-center">This is a demo preview. Full test generation connects to the adaptive engine.</p>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Workbook Modal */}
       <AnimatePresence>

@@ -7,6 +7,7 @@ const nextConfig = {
   experimental: {
     outputFileTracingRoot: path.join(__dirname, '../'),
   },
+  // serverExternalPackages: ['yt-search', 'cheerio'],
   eslint: {
     ignoreDuringBuilds: true,
   },

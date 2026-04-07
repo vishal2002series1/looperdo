@@ -28,7 +28,6 @@ const AVAILABLE_EXAMS = [
 const SUBSCRIBED_EXAMS = ["AWS Solutions Architect Associate", "Microsoft Azure Administrator (AZ-104)"];
 
 // Helper for Mastery Grid colors
-// Note: We now expect numbers between 0 and 1 (e.g., 0.5 = 50%) based on your new API format
 const getScoreVisuals = (scoreFraction: number, attempts: number) => {
     if (attempts === 0) return { color: 'bg-gray-100 text-gray-500 border-gray-200', text: 'N/A', isUnexplored: true };
     
@@ -49,13 +48,27 @@ export default function DashboardClient() {
   const [isGeneratingTest, setIsGeneratingTest] = useState(false);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
 
-  const [selectedExam, setSelectedExam] = useState("Microsoft Azure Administrator (AZ-104)");
+  // 🚀 FIX 1: Default to AWS
+  const [selectedExam, setSelectedExam] = useState("AWS Solutions Architect Associate");
   const [expandedDomain, setExpandedDomain] = useState<string | null>(null); 
   
   // --- Dynamic Progress State ---
-  const [progressTree, setProgressTree] = useState<any[]>([]); // Now expects an array!
+  const [progressTree, setProgressTree] = useState<any[]>([]); 
   const [isFetchingProgress, setIsFetchingProgress] = useState(false);
   const [overallScore, setOverallScore] = useState(0);
+
+  // 🚀 FIX 2: Restore the last viewed exam tab from sessionStorage
+  useEffect(() => {
+    const savedExam = sessionStorage.getItem('lastViewedExam');
+    if (savedExam && AVAILABLE_EXAMS.includes(savedExam)) {
+      setSelectedExam(savedExam);
+    }
+  }, []);
+
+  const handleExamChange = (exam: string) => {
+    setSelectedExam(exam);
+    sessionStorage.setItem('lastViewedExam', exam);
+  };
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -63,7 +76,6 @@ export default function DashboardClient() {
     }
   }, [status, router]);
 
-  // 1. Fetch Basic Profile
   useEffect(() => {
     if (status === 'authenticated') {
       fetch('/api/student-profile')
@@ -74,7 +86,6 @@ export default function DashboardClient() {
     }
   }, [status]);
 
-  // 2. Fetch Dynamic Progress Tree when Exam Changes
   useEffect(() => {
     if (status === 'authenticated') {
       const fetchProgress = async () => {
@@ -84,18 +95,21 @@ export default function DashboardClient() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              student_id: "Vishal", // Override name from history
+              student_id: session?.user?.name ? session.user.name.split(' ')[0] : "Vishal",
               target_exam: selectedExam
             })
           });
           
           const json = await res.json();
           if (json.success) {
-            // Map the new payload structure
             setProgressTree(json.data.progress_tree || []);
-            setOverallScore(Math.round((json.data.true_overall_readiness || 0) * 100));
+            
+            const trueReadiness = json.data.true_overall_readiness || 0;
+            setOverallScore(Math.round(trueReadiness * 100));
+            
+            // 🚀 DEV TIP: This logs the exact unrounded decimal so you can see the baseline math moving
+            console.log(`True Decimal Readiness for ${selectedExam}:`, trueReadiness);
 
-            // Auto-expand the first domain if available
             if (json.data.progress_tree && json.data.progress_tree.length > 0) {
               setExpandedDomain(json.data.progress_tree[0].subject);
             }
@@ -109,7 +123,7 @@ export default function DashboardClient() {
 
       fetchProgress();
     }
-  }, [selectedExam, status]);
+  }, [selectedExam, status, session]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -142,6 +156,7 @@ export default function DashboardClient() {
         target_domain: targetDomain,
         target_topic: targetTopic
     }));
+    sessionStorage.setItem('lastViewedExam', selectedExam); // Save state before navigating
 
     try {
       const response = await fetch('/api/generate-test', {
@@ -150,7 +165,9 @@ export default function DashboardClient() {
         body: JSON.stringify({
           certificationSlug: selectedExam, 
           questionCount: 5,
-          difficulty: null 
+          difficulty: null,
+          targetDomain: targetDomain, 
+          targetTopic: targetTopic    
         }),
       });
 
@@ -201,7 +218,7 @@ export default function DashboardClient() {
         
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-8 flex justify-between items-center">
           <div>
-             <h1 className="text-2xl md:text-3xl font-bold text-[#1e3a5f]">Welcome back, Vishal</h1>
+             <h1 className="text-2xl md:text-3xl font-bold text-[#1e3a5f]">Welcome back, {session?.user?.name?.split(' ')[0] || "Student"}</h1>
              <p className="text-gray-500 text-sm mt-1">Track your exam readiness and continue your preparation journey.</p>
           </div>
         </motion.div>
@@ -216,7 +233,7 @@ export default function DashboardClient() {
                         return (
                             <button 
                                 key={exam}
-                                onClick={() => isSubscribed && setSelectedExam(exam)}
+                                onClick={() => isSubscribed && handleExamChange(exam)} // 🚀 FIX 3: Update onClick handler
                                 className={`snap-start shrink-0 w-72 p-5 rounded-2xl border-2 text-left transition-all relative overflow-hidden group ${
                                     isSelected ? 'border-blue-500 bg-blue-50/50 shadow-md' : 
                                     isSubscribed ? 'border-gray-200 bg-white hover:border-blue-300' : 
@@ -285,7 +302,9 @@ export default function DashboardClient() {
               <div className="bg-white rounded-2xl p-6 border shadow-sm">
                 <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2"><Clock className="w-4 h-4"/> Recent Test History</h2>
                 <div className="space-y-3">
-                  {(profile?.testHistory ?? []).slice(0, 5).map((t: any, i: number) => (
+                  {(profile?.testHistory ?? [])
+                    .filter((t: any) => t?.certificationName === selectedExam || t?.certificationSlug === selectedExam)
+                    .slice(0, 5).map((t: any, i: number) => (
                     <motion.div key={t?.id ?? i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer border border-transparent hover:border-gray-200">
                       <div className="flex items-center gap-3">
                         <div className={`w-2 h-2 rounded-full ${(t?.score ?? 0) >= 80 ? 'bg-[#10b981]' : (t?.score ?? 0) >= 60 ? 'bg-[#2563eb]' : 'bg-[#f59e0b]'}`} />
@@ -329,11 +348,9 @@ export default function DashboardClient() {
                             </div>
                         ) : progressTree && progressTree.length > 0 ? (
                             
-                            // Iterate over the new array format (Domain Level)
                             progressTree.map((domainData: any, dIdx: number) => {
                                 const domainName = domainData.subject;
                                 
-                                // Calculate domain attempted count to know if it's unexplored
                                 let domainAttemptedCount = 0;
                                 domainData.topics.forEach((topicData: any) => {
                                     topicData.sub_topics.forEach((subtopic: any) => {
@@ -367,11 +384,9 @@ export default function DashboardClient() {
                                                 <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
                                                     <div className="bg-gray-50 border-t p-4 space-y-3">
                                                         
-                                                        {/* Iterate over Topics inside the Domain */}
                                                         {domainData.topics.map((topicData: any, tIdx: number) => {
                                                             const topicName = topicData.topic;
                                                             
-                                                            // Calculate total attempts for this specific topic
                                                             let topicAttemptedCount = 0;
                                                             topicData.sub_topics.forEach((subtopic: any) => {
                                                                 topicAttemptedCount += (subtopic.progress.questions_attempted || 0);

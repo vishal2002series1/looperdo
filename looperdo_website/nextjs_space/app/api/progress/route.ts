@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 
-// 🚀 CRITICAL: Tell Next.js NEVER to cache this API route
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
@@ -12,11 +11,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing required parameters" }, { status: 400 });
     }
 
-    // Call your AWS Lambda backend
-    const awsResponse = await fetch("https://2e7o2dai4vbtqzvs7x7qtcwuni0cqrim.lambda-url.us-east-1.on.aws/", {
+    // 🚀 Using .env variable instead of hardcoded URL
+    const lambdaUrl = process.env.AWS_LAMBDA_URL;
+    if (!lambdaUrl) {
+      throw new Error("AWS_LAMBDA_URL is missing in .env");
+    }
+
+    const awsResponse = await fetch(lambdaUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      cache: "no-store", // 🚀 CRITICAL: Tell the fetch API to bypass cache
+      cache: "no-store", 
       body: JSON.stringify({
         action: "get_progress_tree",
         student_profile: {

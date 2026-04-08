@@ -10,28 +10,39 @@ export async function POST(req: Request) {
   try {
     // 1. Authenticate
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
+    if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 2. Parse request from the Results UI
+    // 2. Parse request from the Dashboard UI
     const body = await req.json();
-    const { subject, topic, sub_topic, difficulty_level, target_exam } = body;
     
-    console.log(`Requesting study module for: ${sub_topic}`);
+    // 🚀 THE FIX 1: Read exactly what dashboard-client.tsx sends!
+    const { certificationSlug, targetSubject, targetTopic, targetSubTopic, difficulty } = body;
+    
+    console.log(`Requesting study module for: ${targetSubTopic}`);
+
+    // 🚀 THE FIX 2: Ensure the ID matches the dashboard so history links up
+    const studentId = session?.user?.name ? session.user.name.split(' ')[0] : "Vishal";
 
     // 3. Build payload for Python app.py
     const payload = {
       action: "get_workbook",
       student_profile: {
-        student_id: session.user.id,
-        target_exam: target_exam || 'UPSC',
+        student_id: studentId,
+        target_exam: certificationSlug || 'AWS Solutions Architect Associate',
       },
+      // 🚀 THE FIX 3: Defensive Payload. We send sub_topic at the root AND in config 
+      // to guarantee app.py finds it no matter how you wrote it!
+      subject: targetSubject,
+      topic: targetTopic,
+      sub_topic: targetSubTopic,
+      difficulty_level: difficulty || 3,
       workbook_config: {
-        subject: subject,
-        topic: topic,
-        sub_topic: sub_topic,
-        difficulty_level: parseInt(difficulty_level) || 3
+        subject: targetSubject,
+        topic: targetTopic,
+        sub_topic: targetSubTopic,
+        difficulty_level: difficulty || 3
       }
     };
 

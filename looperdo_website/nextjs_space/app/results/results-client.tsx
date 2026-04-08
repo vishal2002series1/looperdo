@@ -60,6 +60,15 @@ const MindMapRenderer = ({ markdown }: { markdown: string }) => {
   );
 };
 
+// 🚀 FIX: Defensive extraction to handle deeply nested AI JSON responses
+const extractWorkbookData = (rawData: any): any => {
+    if (!rawData) return null;
+    if (rawData.workbook && rawData.workbook.theory_markdown) return rawData.workbook;
+    if (rawData.theory_markdown) return rawData;
+    if (rawData.workbook && rawData.workbook.workbook) return extractWorkbookData(rawData.workbook.workbook);
+    return rawData;
+};
+
 
 export default function ResultsClient() {
   const router = useRouter();
@@ -74,7 +83,7 @@ export default function ResultsClient() {
   const [activeTab, setActiveTab] = useState('theory'); 
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
 
-  // --- NEW: Dynamic YouTube States ---
+  // --- Dynamic YouTube States ---
   const [moduleVideos, setModuleVideos] = useState<any[]>([]);
   const [activeVideo, setActiveVideo] = useState<any>(null);
   const [isFetchingVideos, setIsFetchingVideos] = useState(false);
@@ -99,13 +108,12 @@ export default function ResultsClient() {
     }
   }, [status, router]);
 
-  // --- NEW: Fetch Dynamic YouTube Videos when a workbook opens ---
+  // --- Fetch Dynamic YouTube Videos when a workbook opens ---
   useEffect(() => {
       if (activeWorkbook) {
           const fetchVideos = async () => {
               setIsFetchingVideos(true);
               try {
-                  // Create a highly targeted search query
                   const query = `${activeWorkbook.sub_topic} ${activeWorkbook.target_exam || examName} tutorial explained`;
                   const res = await fetch('/api/youtube-search', {
                       method: 'POST',
@@ -115,7 +123,7 @@ export default function ResultsClient() {
                   const data = await res.json();
                   if (data.success && data.videos.length > 0) {
                       setModuleVideos(data.videos);
-                      setActiveVideo(data.videos[0]); // Auto-select the top result
+                      setActiveVideo(data.videos[0]);
                   }
               } catch (e) {
                   console.error("Error fetching dynamic videos:", e);
@@ -125,7 +133,6 @@ export default function ResultsClient() {
           };
           fetchVideos();
       } else {
-          // Clean up state when modal closes
           setModuleVideos([]);
           setActiveVideo(null);
       }
@@ -167,20 +174,23 @@ export default function ResultsClient() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subject: mistake.subject || 'General',
-          topic: mistake.topic || 'General',
-          sub_topic: mistake.sub_topic,
-          difficulty_level: mistake.difficulty || 3,
-          target_exam: examName 
+          targetSubject: mistake.subject || 'General',   // 🚀 FIX: Match dashboard payload keys
+          targetTopic: mistake.topic || 'General',       // 🚀 FIX: Match dashboard payload keys
+          targetSubTopic: mistake.sub_topic,             // 🚀 FIX: Match dashboard payload keys
+          difficulty: mistake.difficulty || 3,           // 🚀 FIX: Match dashboard payload keys
+          certificationSlug: examName                    // 🚀 FIX: Match dashboard payload keys
         }),
       });
 
       const data = await response.json();
       
-      if (response.ok && data.success) {
-        setActiveWorkbook(data.workbook);
+      // 🚀 FIX: Handle deeply nested JSON gracefully so React doesn't crash reading undefined
+      const cleanWorkbook = extractWorkbookData(data.workbook || data);
+
+      if (response.ok && cleanWorkbook) {
+        setActiveWorkbook(cleanWorkbook);
       } else {
-        alert(`Failed to generate workbook: ${data.error}`);
+        alert(`Failed to generate workbook: ${data.error || 'Invalid AI Response'}`);
       }
     } catch (error) {
       console.error("Workbook error:", error);
@@ -336,7 +346,7 @@ export default function ResultsClient() {
               <div className="flex items-center justify-between p-6 border-b bg-gray-50/50 shrink-0">
                 <div>
                    <h2 className="text-2xl font-bold text-[#1e3a5f]">{activeWorkbook.sub_topic}</h2>
-                   <p className="text-sm text-gray-500 font-medium mt-1">Level {activeWorkbook.difficulty_level} Module • {activeWorkbook.target_exam || examName}</p>
+                   <p className="text-sm text-gray-500 font-medium mt-1">Level {activeWorkbook.difficulty_level || 3} Module • {activeWorkbook.target_exam || examName}</p>
                 </div>
                 <button onClick={() => setActiveWorkbook(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors"><X className="w-6 h-6 text-gray-500" /></button>
               </div>
@@ -422,8 +432,7 @@ export default function ResultsClient() {
                                           <h4 className="font-bold text-2xl text-[#1e3a5f] mt-2">{activeVideo.title}</h4>
                                           <div className="flex items-center gap-4 mt-3 text-sm text-gray-600">
                                               <span className="font-bold bg-gray-100 px-3 py-1 rounded-md text-gray-800">{activeVideo.author?.name || "YouTube Creator"}</span>
-                                              {/* Formatted Date fallback */}
-                                              <span>📅 {new Date(activeVideo.ago).toLocaleDateString() || "Recent"}</span>
+                                              <span>📅 {activeVideo.ago || "Recent"}</span>
                                           </div>
                                       </div>
                                   </div>

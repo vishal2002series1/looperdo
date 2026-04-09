@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, BookOpen, AlertCircle, CheckCircle2, ArrowLeft, Loader2, X, ChevronDown, ChevronUp, PlayCircle, Video } from 'lucide-react';
+import { Trophy, BookOpen, AlertCircle, CheckCircle2, ArrowLeft, ArrowRight, Loader2, X, ChevronDown, ChevronUp, PlayCircle, Video, Crown, Network, Lightbulb, PenTool } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -60,7 +60,7 @@ const MindMapRenderer = ({ markdown }: { markdown: string }) => {
   );
 };
 
-// 🚀 FIX: Defensive extraction to handle deeply nested AI JSON responses
+// Defensive extraction to handle deeply nested AI JSON responses
 const extractWorkbookData = (rawData: any): any => {
     if (!rawData) return null;
     if (rawData.workbook && rawData.workbook.theory_markdown) return rawData.workbook;
@@ -68,7 +68,6 @@ const extractWorkbookData = (rawData: any): any => {
     if (rawData.workbook && rawData.workbook.workbook) return extractWorkbookData(rawData.workbook.workbook);
     return rawData;
 };
-
 
 export default function ResultsClient() {
   const router = useRouter();
@@ -83,7 +82,10 @@ export default function ResultsClient() {
   const [activeTab, setActiveTab] = useState('theory'); 
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
 
-  // --- Dynamic YouTube States ---
+  // 🚀 ADDED PAYWALL STATE
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [paywallMessage, setPaywallMessage] = useState("");
+
   const [moduleVideos, setModuleVideos] = useState<any[]>([]);
   const [activeVideo, setActiveVideo] = useState<any>(null);
   const [isFetchingVideos, setIsFetchingVideos] = useState(false);
@@ -108,7 +110,6 @@ export default function ResultsClient() {
     }
   }, [status, router]);
 
-  // --- Fetch Dynamic YouTube Videos when a workbook opens ---
   useEffect(() => {
       if (activeWorkbook) {
           const fetchVideos = async () => {
@@ -121,12 +122,19 @@ export default function ResultsClient() {
                       body: JSON.stringify({ query })
                   });
                   const data = await res.json();
-                  if (data.success && data.videos.length > 0) {
+                  
+                  // 🚀 FIX: Handle empty video arrays correctly
+                  if (data.success && data.videos && data.videos.length > 0) {
                       setModuleVideos(data.videos);
                       setActiveVideo(data.videos[0]);
+                  } else {
+                      setModuleVideos([]);
+                      setActiveVideo(null);
                   }
               } catch (e) {
                   console.error("Error fetching dynamic videos:", e);
+                  setModuleVideos([]);
+                  setActiveVideo(null);
               } finally {
                   setIsFetchingVideos(false);
               }
@@ -174,23 +182,36 @@ export default function ResultsClient() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          targetSubject: mistake.subject || 'General',   // 🚀 FIX: Match dashboard payload keys
-          targetTopic: mistake.topic || 'General',       // 🚀 FIX: Match dashboard payload keys
-          targetSubTopic: mistake.sub_topic,             // 🚀 FIX: Match dashboard payload keys
-          difficulty: mistake.difficulty || 3,           // 🚀 FIX: Match dashboard payload keys
-          certificationSlug: examName                    // 🚀 FIX: Match dashboard payload keys
+          targetSubject: mistake.subject || 'General',   
+          targetTopic: mistake.topic || 'General',       
+          targetSubTopic: mistake.sub_topic,             
+          difficulty: mistake.difficulty || 3,           
+          certificationSlug: examName                    
         }),
       });
 
       const data = await response.json();
       
-      // 🚀 FIX: Handle deeply nested JSON gracefully so React doesn't crash reading undefined
+      // 🚀 CRITICAL FIX: Intercept 403 and STOP execution
+      if (response.status === 403) {
+          setPaywallMessage(data.message || "You have exhausted your free study modules.");
+          setShowPaywall(true);
+          setIsGeneratingWorkbook(false);
+          return; // This prevents the undefined alert from ever happening
+      }
+
+      if (!response.ok) {
+          alert(data.error || "Failed to generate workbook.");
+          setIsGeneratingWorkbook(false);
+          return;
+      }
+
       const cleanWorkbook = extractWorkbookData(data.workbook || data);
 
-      if (response.ok && cleanWorkbook) {
+      if (cleanWorkbook) {
         setActiveWorkbook(cleanWorkbook);
       } else {
-        alert(`Failed to generate workbook: ${data.error || 'Invalid AI Response'}`);
+        alert(`Failed to extract workbook from AI Response`);
       }
     } catch (error) {
       console.error("Workbook error:", error);
@@ -207,6 +228,26 @@ export default function ResultsClient() {
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 relative">
       
+      {/* 🚀 ADDED PAYWALL MODAL */}
+      <AnimatePresence>
+        {showPaywall && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-[#2563eb] to-[#7c3aed]" />
+              <button onClick={() => setShowPaywall(false)} className="absolute top-4 right-4 p-1 rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"><X className="w-5 h-5" /></button>
+              <div className="w-20 h-20 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-white shadow-inner">
+                <Crown className="w-10 h-10 text-[#7c3aed]" />
+              </div>
+              <h2 className="text-2xl font-black text-[#1e3a5f] mb-3">Upgrade to Premium</h2>
+              <p className="text-gray-600 mb-8 leading-relaxed">{paywallMessage}</p>
+              <button onClick={() => router.push('/pricing')} className="w-full bg-[#2563eb] hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2">
+                View Pricing Plans <ArrowRight className="w-5 h-5" />
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {isGeneratingWorkbook && (
           <motion.div 
@@ -277,7 +318,7 @@ export default function ResultsClient() {
                     <div key={index} className={`border rounded-lg overflow-hidden transition-colors ${result.is_correct ? 'border-green-100 bg-green-50/30' : 'border-red-100 bg-red-50/30'}`}>
                        <button onClick={() => toggleExpand(result.question_id)} className="w-full text-left p-4 flex items-start gap-4 hover:bg-black/5 transition-colors">
                           <div className="mt-1">
-                             {result.is_correct ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <X className="w-5 h-5 text-red-500" />}
+                             {result.is_correct ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <AlertCircle className="w-5 h-5 text-red-500" />}
                           </div>
                           <div className="flex-1">
                              <div className="flex justify-between items-start">
@@ -351,12 +392,12 @@ export default function ResultsClient() {
                 <button onClick={() => setActiveWorkbook(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors"><X className="w-6 h-6 text-gray-500" /></button>
               </div>
               
-              <div className="flex border-b px-6 shrink-0 bg-white">
+              <div className="flex border-b px-6 shrink-0 bg-white overflow-x-auto">
                   {['theory', 'map', 'tricks', 'videos', 'practice'].map((tab) => (
                       <button 
                           key={tab}
                           onClick={() => setActiveTab(tab)}
-                          className={`px-6 py-4 text-sm font-bold capitalize transition-colors border-b-2 tracking-wide ${activeTab === tab ? 'border-[#2563eb] text-[#2563eb]' : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'}`}
+                          className={`px-6 py-4 text-sm font-bold capitalize transition-colors border-b-2 tracking-wide whitespace-nowrap ${activeTab === tab ? 'border-[#2563eb] text-[#2563eb]' : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'}`}
                       >
                           {tab === 'map' ? 'Mind Map' : tab}
                       </button>
@@ -398,7 +439,7 @@ export default function ResultsClient() {
                       </div>
                   )}
 
-                  {/* VIDEOS TAB (UPDATED FOR GOOGLE YOUTUBE API) */}
+                  {/* VIDEOS TAB */}
                   {activeTab === 'videos' && (
                       <div className="space-y-8">
                           <div className="mb-6 border-b pb-4">
@@ -416,7 +457,6 @@ export default function ResultsClient() {
                               </div>
                           ) : activeVideo ? (
                               <div className="space-y-6">
-                                  {/* --- PRIMARY TOP VIDEO --- */}
                                   <div className="flex flex-col gap-4">
                                       <div className="w-full aspect-video bg-black rounded-xl overflow-hidden shadow-lg border border-gray-200 relative">
                                           <iframe 
@@ -437,7 +477,6 @@ export default function ResultsClient() {
                                       </div>
                                   </div>
 
-                                  {/* --- SECONDARY VIDEOS (CLICKABLE LIST) --- */}
                                   {moduleVideos.length > 1 && (
                                       <div className="pt-8 border-t mt-8">
                                           <h4 className="font-bold text-lg text-[#1e3a5f] mb-4">Explore More Tutorials</h4>

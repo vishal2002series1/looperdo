@@ -55,11 +55,17 @@ model User {
   emailVerified DateTime?
   image         String?
   
-  // Custom Business Fields
-  subscriptionTier String   @default("FREE") // FREE, PRO, ENTERPRISE
-  countryCode      String?  // e.g., IN, US
-  currency         String?  // e.g., INR, USD
+  // Custom Business Fields & Localization
+  countryCode   String?  // e.g., IN, US
+  currency      String?  // e.g., INR, USD
 
+  // --- Subscription & Usage Tracking ---
+  subscriptionTier String   @default("FREE") // "FREE", "PRO", or "ALL_ACCESS"
+  unlockedExams    String[] @default([])     // e.g., ["AWS Solutions Architect Associate"]
+  testsGenerated   Int      @default(0)
+  modulesGenerated Int      @default(0)
+
+  // Relations
   accounts      Account[]
   sessions      Session[]
   testAttempts  TestAttempt[]

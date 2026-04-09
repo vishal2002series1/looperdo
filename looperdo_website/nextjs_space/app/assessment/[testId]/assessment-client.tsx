@@ -6,6 +6,12 @@ import { motion } from 'framer-motion';
 import { Loader2, ArrowRight, ArrowLeft, CheckCircle } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 
+// --- LaTeX rendering imports ---
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+
 export default function AssessmentClient({ testId }: { testId: string }) {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -74,11 +80,10 @@ export default function AssessmentClient({ testId }: { testId: string }) {
       const result = await response.json();
 
       if (response.ok && result.success) {
-        // Clear the test and move to a results page (we will build this next)
+        // Clear the test and move to a results page
         sessionStorage.removeItem('activeTest');
         sessionStorage.setItem('lastResult', JSON.stringify(result));
-        alert(`Test Graded! You scored ${result.score}%. Routing to results...`);
-        router.push('/results'); // Route back to dash temporarily until we build the results page
+        router.push('/results'); 
       } else {
         alert(`Evaluation Failed: ${result.error}`);
       }
@@ -116,15 +121,19 @@ export default function AssessmentClient({ testId }: { testId: string }) {
         >
           {/* Render Shared Context if applicable */}
           {currentQuestion.shared_context && (
-            <div className="mb-6 p-4 bg-blue-50 rounded-md border border-blue-100">
+            <div className="mb-6 p-4 bg-blue-50 rounded-md border border-blue-100 prose prose-sm max-w-none text-blue-900">
                <h3 className="text-xs font-bold uppercase text-blue-800 mb-2">Context Passage</h3>
-               <p className="text-sm text-blue-900">{currentQuestion.shared_context}</p>
+               <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                 {currentQuestion.shared_context}
+               </ReactMarkdown>
             </div>
           )}
 
-          <h2 className="text-lg font-medium text-[#1e3a5f] mb-6">
-            {currentQuestion.text}
-          </h2>
+          <div className="text-lg font-medium text-[#1e3a5f] mb-6 prose prose-lg max-w-none">
+            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+              {currentQuestion.text}
+            </ReactMarkdown>
+          </div>
 
           <div className="space-y-3">
             {Object.entries(currentQuestion.options).map(([key, value]) => {
@@ -145,8 +154,11 @@ export default function AssessmentClient({ testId }: { testId: string }) {
                     }`}>
                       {key}
                     </div>
-                    {/* Note: In a real production app, you'd use a LaTeX renderer like KaTeX here instead of raw strings */}
-                    <span className="text-gray-700 leading-relaxed">{value as string}</span>
+                    <div className="text-gray-700 leading-relaxed prose prose-sm max-w-none">
+                      <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                        {value as string}
+                      </ReactMarkdown>
+                    </div>
                   </div>
                 </button>
               );

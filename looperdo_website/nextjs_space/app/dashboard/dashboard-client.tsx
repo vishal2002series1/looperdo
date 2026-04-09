@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileText, BookOpen, Flame, Clock, Trophy, ArrowRight, ArrowLeft, Loader2, Lock, Unlock, ChevronDown, ChevronUp, Target, Zap, PlayCircle, PlusCircle } from 'lucide-react';
+import { FileText, BookOpen, Flame, Clock, Trophy, ArrowRight, ArrowLeft, Loader2, Lock, Unlock, ChevronDown, ChevronUp, Target, Zap, PlayCircle, PlusCircle, Crown, X } from 'lucide-react';
 import ReadinessGauge from '@/components/readiness-gauge';
 import SectionReveal from '@/components/section-reveal';
 
@@ -25,7 +25,7 @@ const AVAILABLE_EXAMS = [
   "Lean Six Sigma Black Belt (IASSC)",
   "PMI Project Management Professional (PMP)"
 ];
-const SUBSCRIBED_EXAMS = ["AWS Solutions Architect Associate", "Microsoft Azure Administrator (AZ-104)"];
+// const SUBSCRIBED_EXAMS = ["AWS Solutions Architect Associate", "Microsoft Azure Administrator (AZ-104)"];
 
 // Helper for Mastery Grid colors
 const getScoreVisuals = (scoreFraction: number, attempts: number) => {
@@ -75,10 +75,13 @@ export default function DashboardClient() {
   const [isGeneratingTest, setIsGeneratingTest] = useState(false);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
 
+  // 🚀 ADDED PAYWALL STATE
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [paywallMessage, setPaywallMessage] = useState("");
+
   const [selectedExam, setSelectedExam] = useState("AWS Solutions Architect Associate");
   const [expandedDomain, setExpandedDomain] = useState<string | null>(null);
 
-  // --- Dynamic Progress & History State ---
   const [progressTree, setProgressTree] = useState<any[]>([]);
   const [testHistory, setTestHistory] = useState<any[]>([]);
   const [isFetchingProgress, setIsFetchingProgress] = useState(false);
@@ -98,20 +101,25 @@ export default function DashboardClient() {
   };
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.replace('/login');
-    }
+    if (status === 'unauthenticated') router.replace('/login');
   }, [status, router]);
 
   useEffect(() => {
     if (status === 'authenticated') {
       fetch('/api/student-profile')
         .then((r) => r?.json?.())
-        .then((data: any) => setProfile(data ?? null))
+        .then((data: any) => {
+           // 🚀 Redirect if they have no exams!
+           if (data?.unlockedExams?.length === 0 && data?.subscriptionTier === "FREE") {
+               router.replace('/onboarding');
+           } else {
+               setProfile(data ?? null);
+           }
+        })
         .catch(() => setProfile(null))
         .finally(() => setLoading(false));
     }
-  }, [status]);
+  }, [status, router]);
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -120,14 +128,10 @@ export default function DashboardClient() {
           const res = await fetch('/api/history', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              student_id: session?.user?.name ? session.user.name.split(' ')[0] : "Vishal"
-            })
+            body: JSON.stringify({ student_id: session?.user?.name ? session.user.name.split(' ')[0] : "Vishal" })
           });
           const json = await res.json();
-          if (json.success) {
-            setTestHistory(json.history);
-          }
+          if (json.success) setTestHistory(json.history);
         } catch (e) {
           console.error("Failed to fetch history", e);
         }
@@ -217,6 +221,13 @@ export default function DashboardClient() {
 
       const data = await response.json();
 
+      // 🚀 THE FIX: CATCH THE 403 PAYWALL HIT
+      if (response.status === 403) {
+          setPaywallMessage(data.message || "You have reached your free limit.");
+          setShowPaywall(true);
+          return;
+      }
+
       if (response.ok && data.questions?.length > 0) {
         sessionStorage.setItem('activeTest', JSON.stringify({
            testId: data.testId,
@@ -257,7 +268,26 @@ export default function DashboardClient() {
   return (
     <div className="bg-gray-50/50 min-h-screen relative pb-20">
 
-      {/* Test Generation Loading Overlay */}
+      {/* 🚀 ADDED PAYWALL MODAL */}
+      <AnimatePresence>
+        {showPaywall && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-[#2563eb] to-[#7c3aed]" />
+              <button onClick={() => setShowPaywall(false)} className="absolute top-4 right-4 p-1 rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"><X className="w-5 h-5" /></button>
+              <div className="w-20 h-20 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-white shadow-inner">
+                <Crown className="w-10 h-10 text-[#7c3aed]" />
+              </div>
+              <h2 className="text-2xl font-black text-[#1e3a5f] mb-3">Upgrade to Premium</h2>
+              <p className="text-gray-600 mb-8 leading-relaxed">{paywallMessage}</p>
+              <button onClick={() => router.push('/pricing')} className="w-full bg-[#2563eb] hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2">
+                View Pricing Plans <ArrowRight className="w-5 h-5" />
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {isGeneratingTest && (
           <motion.div
@@ -275,7 +305,6 @@ export default function DashboardClient() {
 
       {/* Main Dashboard Content */}
       <div className="mx-auto max-w-[1200px] px-4 py-8">
-
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-8 flex justify-between items-center">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-[#1e3a5f]">Welcome back, {session?.user?.name?.split(' ')[0] || "Student"}</h1>
@@ -288,7 +317,7 @@ export default function DashboardClient() {
             <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Your Career Tracks</h2>
             <div className="flex gap-4 overflow-x-auto pb-4 snap-x hide-scrollbar">
               {AVAILABLE_EXAMS.map((exam) => {
-                const isSubscribed = SUBSCRIBED_EXAMS.includes(exam);
+                const isSubscribed = profile?.unlockedExams?.includes(exam) || profile?.subscriptionTier === "ALL_ACCESS";
                 const isSelected = selectedExam === exam;
                 return (
                   <button
@@ -339,7 +368,6 @@ export default function DashboardClient() {
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
-
           <div className="lg:col-span-1 space-y-6">
             <SectionReveal>
               <div className="bg-white rounded-2xl p-8 border shadow-sm flex flex-col items-center text-center">

@@ -1,39 +1,48 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
+import prisma from '@/lib/prisma';
+import { SUBSCRIPTION_CONFIG } from '@/lib/tier-config';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 900; 
 
 export async function POST(req: Request) {
-  console.log("=== BRAND NEW MODULE GENERATOR HIT ===");
   try {
-    // 1. Authenticate
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 2. Parse request from the Dashboard UI
     const body = await req.json();
-    
-    // 🚀 THE FIX 1: Read exactly what dashboard-client.tsx sends!
     const { certificationSlug, targetSubject, targetTopic, targetSubTopic, difficulty } = body;
     
-    console.log(`Requesting study module for: ${targetSubTopic}`);
+    // --- 🚀 GATEKEEPER LOGIC START ---
+    const userEmail = session.user.email;
+    if (!userEmail) return NextResponse.json({ error: "User email not found" }, { status: 400 });
 
-    // 🚀 THE FIX 2: Ensure the ID matches the dashboard so history links up
+    const dbUser = await prisma.user.findUnique({ where: { email: userEmail } });
+    if (!dbUser) return NextResponse.json({ error: "User not found in database" }, { status: 404 });
+
+    const tier = dbUser.subscriptionTier as keyof typeof SUBSCRIPTION_CONFIG;
+    const config = SUBSCRIPTION_CONFIG[tier] || SUBSCRIPTION_CONFIG.FREE;
+
+    if (dbUser.modulesGenerated >= config.maxStudyModules) {
+      return NextResponse.json({ 
+          error: "PAYWALL_HIT", 
+          message: `You have exhausted your free study modules. Upgrade to unlock unlimited AI Workbooks.` 
+      }, { status: 403 });
+    }
+    // --- GATEKEEPER LOGIC END ---
+
     const studentId = session?.user?.name ? session.user.name.split(' ')[0] : "Vishal";
 
-    // 3. Build payload for Python app.py
     const payload = {
       action: "get_workbook",
       student_profile: {
         student_id: studentId,
         target_exam: certificationSlug || 'AWS Solutions Architect Associate',
       },
-      // 🚀 THE FIX 3: Defensive Payload. We send sub_topic at the root AND in config 
-      // to guarantee app.py finds it no matter how you wrote it!
       subject: targetSubject,
       topic: targetTopic,
       sub_topic: targetSubTopic,
@@ -46,17 +55,14 @@ export async function POST(req: Request) {
       }
     };
 
-    // 4. Hit the AWS Lambda Function URL
     const lambdaUrl = process.env.AWS_LAMBDA_URL;
     if (!lambdaUrl) throw new Error("AWS_LAMBDA_URL is missing in .env");
-
-    console.log("Pinging AWS Lambda Engine...");
 
     const lambdaResponse = await fetch(lambdaUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-      cache: 'no-store' // STRICTLY prevent Next.js from caching this POST
+      cache: 'no-store'
     });
 
     if (!lambdaResponse.ok) {
@@ -65,19 +71,12 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: `AWS Error: ${errText}` }, { status: 500 });
     }
 
-    // 5. Parse Aggressively
     const rawResponseText = await lambdaResponse.text();
-    console.log("Raw Response received:", rawResponseText.substring(0, 100) + "...");
-
     let parsed: any = null;
     try {
         parsed = JSON.parse(rawResponseText);
-        if (parsed && typeof parsed.body === 'string') {
-             parsed = JSON.parse(parsed.body);
-        }
-        if (parsed && typeof parsed.workbook === 'string') {
-             parsed.workbook = JSON.parse(parsed.workbook);
-        }
+        if (parsed && typeof parsed.body === 'string') parsed = JSON.parse(parsed.body);
+        if (parsed && typeof parsed.workbook === 'string') parsed.workbook = JSON.parse(parsed.workbook);
     } catch (e) {
         console.error("JSON Parse Error:", e);
         return NextResponse.json({ error: "Failed to parse JSON from AI." }, { status: 500 });
@@ -87,7 +86,18 @@ export async function POST(req: Request) {
          return NextResponse.json({ error: "No workbook data found in the AI response." }, { status: 500 });
     }
 
-    console.log("=== MODULE GENERATION SUCCESS ===");
+    // --- 🚀 UPDATE USAGE IF SUCCESSFUL & NOT CACHED ---
+    const isCached = rawResponseText.toLowerCase().includes("cache") || parsed?.message?.toLowerCase().includes("cache") || parsed?.status === "cached";
+    
+    if (!isCached) {
+        await prisma.user.update({
+            where: { email: userEmail },
+            data: { modulesGenerated: dbUser.modulesGenerated + 1 }
+        });
+    } else {
+        console.log("Module fetched from cache. No credit deducted.");
+    }
+
     return NextResponse.json({
       success: true,
       workbook: parsed.workbook

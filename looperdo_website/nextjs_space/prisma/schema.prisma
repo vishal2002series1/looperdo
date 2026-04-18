@@ -95,3 +95,12 @@ model Workbook {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+model ContactSubmission {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  message   String   @db.Text
+  createdAt DateTime @default(now())
+}

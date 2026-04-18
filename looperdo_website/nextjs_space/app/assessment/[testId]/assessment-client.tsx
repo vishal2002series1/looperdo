@@ -80,7 +80,7 @@ export default function AssessmentClient({ testId }: { testId: string }) {
       const result = await response.json();
 
       if (response.ok && result.success) {
-        sessionStorage.removeItem('activeTest');
+        // sessionStorage.removeItem('activeTest');
         sessionStorage.setItem('lastResult', JSON.stringify(result));
         router.push('/results'); 
       } else {

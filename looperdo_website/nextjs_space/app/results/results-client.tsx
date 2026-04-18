@@ -74,7 +74,7 @@ export default function ResultsClient() {
   const { data: session, status } = useSession();
   
   const [resultData, setResultData] = useState<any>(null);
-  const [examName, setExamName] = useState('AWS Certification'); 
+  const [examName, setExamName] = useState<string>('');
   
   const [isGeneratingWorkbook, setIsGeneratingWorkbook] = useState(false);
   const [workbookMessageIndex, setWorkbookMessageIndex] = useState(0);
@@ -98,30 +98,51 @@ export default function ResultsClient() {
     
     const storedResult = sessionStorage.getItem('lastResult');
     const storedTest = sessionStorage.getItem('activeTest'); 
+    const lastViewedExam = sessionStorage.getItem('lastViewedExam');
     
     if (storedResult) { 
       setResultData(JSON.parse(storedResult));
     } else {
       router.replace('/dashboard');
+      return;
     }
 
+    // Figure out which exam this result is for.
+    // Try activeTest first (most accurate), fall back to lastViewedExam.
     if (storedTest) {
-        setExamName(JSON.parse(storedTest).certificationSlug || 'AWS Certification');
+        const parsed = JSON.parse(storedTest);
+        if (parsed.certificationSlug) {
+            setExamName(parsed.certificationSlug);
+            return;
+        }
     }
-  }, [status, router]);
+    if (lastViewedExam) {
+        setExamName(lastViewedExam);
+        return;
+    }
+    
+    // If we reach here, something is wrong — send user back to dashboard.
+    console.error('No exam context found in sessionStorage');
+    router.replace('/dashboard');
+}, [status, router]);
 
   useEffect(() => {
       if (activeWorkbook) {
           const fetchVideos = async () => {
-              setIsFetchingVideos(true);
-              try {
-                  const query = `${activeWorkbook.sub_topic} ${activeWorkbook.target_exam || examName} tutorial explained`;
-                  const res = await fetch('/api/youtube-search', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ query })
-                  });
-                  const data = await res.json();
+            setIsFetchingVideos(true);
+            try {
+              // Send structured fields instead of a pre-built query
+              // Don't blindly append exam name — it can poison the query
+              const res = await fetch('/api/youtube-search', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                      subTopic: activeWorkbook.sub_topic,
+                      topic: activeWorkbook.topic,  // add this to make queries more specific
+                      exam: activeWorkbook.target_exam || examName,
+                  })
+              });
+              const data = await res.json();
                   
                   // 🚀 FIX: Handle empty video arrays correctly
                   if (data.success && data.videos && data.videos.length > 0) {
@@ -175,6 +196,12 @@ export default function ResultsClient() {
   const uniqueMistakes = Array.from(uniqueMistakesMap.values());
 
   const handleGenerateWorkbook = async (mistake: any) => {
+    // SAFETY CHECK: don't send requests with no exam context
+    if (!examName) {
+      alert("Could not determine which exam this is for. Please return to the dashboard and try again.");
+      router.replace('/dashboard');
+      return;
+    }
     setIsGeneratingWorkbook(true);
     setActiveTab('theory'); 
     try {

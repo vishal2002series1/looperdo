@@ -9,6 +9,10 @@ const nextConfig = {
   images: { 
     unoptimized: true 
   },
+  experimental: {
+    // This tells Vercel to heavily bundle and minify the server files
+    serverComponentsExternalPackages: ['@prisma/client', 'bcryptjs'],
+  }
 };
 
 module.exports = nextConfig;

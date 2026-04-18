@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma';
 import { SUBSCRIPTION_CONFIG } from '@/lib/tier-config';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 9; 
+// export const maxDuration = 9; 
 
 export async function POST(req: Request) {
   try {

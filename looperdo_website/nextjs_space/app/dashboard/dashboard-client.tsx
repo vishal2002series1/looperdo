@@ -120,7 +120,8 @@ export default function DashboardClient() {
           const res = await fetch('/api/history', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ student_id: session.user.name.split(' ')[0] })
+            // 🚀 FIX: Added optional chaining and a fallback for TypeScript
+            body: JSON.stringify({ student_id: session?.user?.name?.split(' ')[0] || "Student" })
           });
           const json = await res.json();
           if (json.success) setTestHistory(json.history);
@@ -141,7 +142,8 @@ export default function DashboardClient() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              student_id: session.user.name.split(' ')[0],
+              // 🚀 FIX: Added optional chaining and a fallback for TypeScript
+              student_id: session?.user?.name?.split(' ')[0] || "Student",
               target_exam: selectedExam
             })
           });
@@ -162,7 +164,7 @@ export default function DashboardClient() {
       fetchProgress();
     }
   }, [selectedExam, status, session]);
-
+  
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isGeneratingTest) {

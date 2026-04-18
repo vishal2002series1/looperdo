@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth-options';
 import prisma from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 700;
 
 export async function POST(req: Request) {
   try {

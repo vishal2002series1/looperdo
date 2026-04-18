@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,7 +17,6 @@ const LOADING_MESSAGES = [
   "🔄 Refining the question batch..."
 ];
 
-// --- RBAC Config ---
 const AVAILABLE_EXAMS = [
   "AWS Solutions Architect Associate",
   "Microsoft Azure Administrator (AZ-104)",
@@ -26,9 +25,7 @@ const AVAILABLE_EXAMS = [
   "Lean Six Sigma Black Belt (IASSC)",
   "PMI Project Management Professional (PMP)"
 ];
-// const SUBSCRIBED_EXAMS = ["AWS Solutions Architect Associate", "Microsoft Azure Administrator (AZ-104)"];
 
-// Helper for Mastery Grid colors
 const getScoreVisuals = (scoreFraction: number, attempts: number) => {
     if (attempts === 0) return { color: 'bg-gray-100 text-gray-500 border-gray-200', text: 'N/A', isUnexplored: true };
     const percentage = Math.round(scoreFraction * 100);
@@ -37,7 +34,6 @@ const getScoreVisuals = (scoreFraction: number, attempts: number) => {
     return { color: 'bg-red-100 text-red-700 border-red-200', text: `${percentage}%`, isUnexplored: false };
 };
 
-// Helper to determine the type of test based on the question spread
 const getTestModeDetails = (results: any[]) => {
     if (!results || results.length === 0) return { label: "Practice Test", badgeColor: "bg-gray-100 text-gray-600" };
     const uniqueSubjects = new Set(results.map(r => r.subject));
@@ -51,7 +47,6 @@ const getTestModeDetails = (results: any[]) => {
     }
 };
 
-// Hydration-safe date formatter
 const formatDateSafely = (timestamp: string | number, includeTime: boolean = false) => {
     try {
         const date = new Date(timestamp);
@@ -66,7 +61,7 @@ const formatDateSafely = (timestamp: string | number, includeTime: boolean = fal
 };
 
 export default function DashboardClient() {
-  const { data: session, status } = useSession() || {};
+  const { data: session, status } = useSession();
   const router = useRouter();
 
   const [mounted, setMounted] = useState(false);
@@ -76,7 +71,6 @@ export default function DashboardClient() {
   const [isGeneratingTest, setIsGeneratingTest] = useState(false);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
 
-  // 🚀 ADDED PAYWALL STATE
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallMessage, setPaywallMessage] = useState("");
 
@@ -88,6 +82,7 @@ export default function DashboardClient() {
   const [isFetchingProgress, setIsFetchingProgress] = useState(false);
   const [overallScore, setOverallScore] = useState(0);
 
+  // ✅ ALWAYS RUN HOOKS AT THE TOP
   useEffect(() => {
     setMounted(true);
     const savedExam = sessionStorage.getItem('lastViewedExam');
@@ -96,13 +91,10 @@ export default function DashboardClient() {
     }
   }, []);
 
-  const handleExamChange = (exam: string) => {
-    setSelectedExam(exam);
-    sessionStorage.setItem('lastViewedExam', exam);
-  };
-
   useEffect(() => {
-    if (status === 'unauthenticated') router.replace('/login');
+    if (status === 'unauthenticated') {
+        router.replace('/login');
+    }
   }, [status, router]);
 
   useEffect(() => {
@@ -110,7 +102,6 @@ export default function DashboardClient() {
       fetch('/api/student-profile')
         .then((r) => r?.json?.())
         .then((data: any) => {
-           // 🚀 Redirect if they have no exams!
            if (data?.unlockedExams?.length === 0 && data?.subscriptionTier === "FREE") {
                router.replace('/onboarding');
            } else {
@@ -123,13 +114,13 @@ export default function DashboardClient() {
   }, [status, router]);
 
   useEffect(() => {
-    if (status === 'authenticated') {
+    if (status === 'authenticated' && session?.user?.name) {
       const fetchHistory = async () => {
         try {
           const res = await fetch('/api/history', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ student_id: session?.user?.name ? session.user.name.split(' ')[0] : "Vishal" })
+            body: JSON.stringify({ student_id: session.user.name.split(' ')[0] })
           });
           const json = await res.json();
           if (json.success) setTestHistory(json.history);
@@ -142,7 +133,7 @@ export default function DashboardClient() {
   }, [status, session]);
 
   useEffect(() => {
-    if (status === 'authenticated') {
+    if (status === 'authenticated' && session?.user?.name) {
       const fetchProgress = async () => {
         setIsFetchingProgress(true);
         try {
@@ -150,7 +141,7 @@ export default function DashboardClient() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              student_id: session?.user?.name ? session.user.name.split(' ')[0] : "Vishal",
+              student_id: session.user.name.split(' ')[0],
               target_exam: selectedExam
             })
           });
@@ -184,27 +175,23 @@ export default function DashboardClient() {
     return () => clearInterval(interval);
   }, [isGeneratingTest]);
 
-  if (!mounted) return null;
+  // ✅ SAFELY COMPUTE DERIVED DATA
+  const filteredHistory = useMemo(() => {
+    return testHistory.filter((t: any) => t.exam === selectedExam);
+  }, [testHistory, selectedExam]);
 
-  if (status === 'loading' || loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-[#2563eb]" />
-      </div>
-    );
-  }
 
-  if (status === 'unauthenticated') return null;
+  const handleExamChange = (exam: string) => {
+    setSelectedExam(exam);
+    sessionStorage.setItem('lastViewedExam', exam);
+  };
 
   const handleGenerateTest = async (mode: 'full' | 'targeted', targetDomain?: string, targetTopic?: string) => {
     setIsGeneratingTest(true);
 
-    // Figure out how many questions to send based on mode and user's tier
     const tier = (profile?.subscriptionTier as keyof typeof SUBSCRIPTION_CONFIG) || 'FREE';
     const config = SUBSCRIPTION_CONFIG[tier] || SUBSCRIPTION_CONFIG.FREE;
-    const questionCount = mode === 'full' 
-        ? config.questionsPerAdaptiveTest   // 30 for full adaptive
-        : config.questionsPerTopicTest;     // 10 for targeted/sectional
+    const questionCount = mode === 'full' ? config.questionsPerAdaptiveTest : config.questionsPerTopicTest;
 
     sessionStorage.setItem('activeTest', JSON.stringify({
         certificationSlug: selectedExam,
@@ -220,7 +207,7 @@ export default function DashboardClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           certificationSlug: selectedExam,
-          questionCount: questionCount,    // ← now dynamic, from config
+          questionCount: questionCount,
           difficulty: null,
           targetDomain: targetDomain,
           targetTopic: targetTopic
@@ -254,7 +241,7 @@ export default function DashboardClient() {
     } finally {
       setIsGeneratingTest(false);
     }
-};
+  };
 
   const handleHistoryClick = (t: any) => {
     sessionStorage.setItem('lastResult', JSON.stringify({
@@ -270,12 +257,22 @@ export default function DashboardClient() {
     router.push('/results');
   };
 
-  const filteredHistory = testHistory.filter((t: any) => t.exam === selectedExam);
+
+  // ✅ NO EARLY RETURNS! HANDLE LOADING STATES INSIDE THE MAIN RENDER
+  if (!mounted || status === 'loading' || loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-[#2563eb]" />
+      </div>
+    );
+  }
+
+  if (status === 'unauthenticated') {
+     return null; // Will redirect via useEffect
+  }
 
   return (
     <div className="bg-gray-50/50 min-h-screen relative pb-20">
-
-      {/* 🚀 ADDED PAYWALL MODAL */}
       <AnimatePresence>
         {showPaywall && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -310,7 +307,6 @@ export default function DashboardClient() {
         )}
       </AnimatePresence>
 
-      {/* Main Dashboard Content */}
       <div className="mx-auto max-w-[1200px] px-4 py-8">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-8 flex justify-between items-center">
           <div>

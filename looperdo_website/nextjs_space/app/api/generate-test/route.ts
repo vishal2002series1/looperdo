@@ -6,6 +6,7 @@ import { SUBSCRIPTION_CONFIG } from '@/lib/tier-config';
 
 export const dynamic = 'force-dynamic';
 // export const maxDuration = 9; 
+export const maxDuration = 300;  // 5 minutes; raise if needed, max 800 on Pro
 
 
 export async function POST(req: Request) {

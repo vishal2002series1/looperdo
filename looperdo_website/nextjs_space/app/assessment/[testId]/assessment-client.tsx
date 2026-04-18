@@ -11,6 +11,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
+import { MIN_QUESTION_VIEW_SECONDS } from '@/lib/tier-config';
 
 export default function AssessmentClient({ testId }: { testId: string }) {
   const router = useRouter();
@@ -20,12 +21,35 @@ export default function AssessmentClient({ testId }: { testId: string }) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(MIN_QUESTION_VIEW_SECONDS);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.replace('/login');
       return;
     }
+
+  // Reset and run the countdown timer every time the user sees a new question
+  useEffect(() => {
+    if (MIN_QUESTION_VIEW_SECONDS <= 0) {
+      setTimeRemaining(0);
+      return;
+    }
+    
+    setTimeRemaining(MIN_QUESTION_VIEW_SECONDS);
+    
+    const interval = setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [currentQuestionIndex]);
     
     // Pull the generated test from browser storage
     const storedTest = sessionStorage.getItem('activeTest');
@@ -188,22 +212,28 @@ export default function AssessmentClient({ testId }: { testId: string }) {
           </button>
 
           {isLastQuestion ? (
-            <button
-              onClick={handleSubmit}
-              disabled={isSubmitting || Object.keys(answers).length < testData.questions.length}
-              className="px-8 py-3 font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
-            >
-              {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-              {isSubmitting ? "Evaluating..." : "Submit Test"}
-            </button>
-          ) : (
-            <button
-              onClick={handleNext}
-              className="px-8 py-3 font-bold text-white bg-[#2563eb] hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
-            >
-              Next <ArrowRight className="w-4 h-4" />
-            </button>
-          )}
+              <button
+                onClick={handleSubmit}
+                disabled={isSubmitting || Object.keys(answers).length < testData.questions.length || timeRemaining > 0}
+                className="px-8 py-3 font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+                {isSubmitting 
+                  ? "Evaluating..." 
+                  : timeRemaining > 0 
+                    ? `Submit in ${timeRemaining}s` 
+                    : "Submit Test"}
+              </button>
+            ) : (
+              <button
+                onClick={handleNext}
+                disabled={timeRemaining > 0}
+                className="px-8 py-3 font-bold text-white bg-[#2563eb] hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {timeRemaining > 0 ? `Next in ${timeRemaining}s` : 'Next'} 
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
         </div>
 
       </div>

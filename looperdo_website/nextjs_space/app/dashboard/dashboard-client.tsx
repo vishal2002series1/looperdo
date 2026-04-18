@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FileText, BookOpen, Flame, Clock, Trophy, ArrowRight, ArrowLeft, Loader2, Lock, Unlock, ChevronDown, ChevronUp, Target, Zap, PlayCircle, PlusCircle, Crown, X } from 'lucide-react';
 import ReadinessGauge from '@/components/readiness-gauge';
 import SectionReveal from '@/components/section-reveal';
+import { SUBSCRIPTION_CONFIG } from '@/lib/tier-config';
 
 const LOADING_MESSAGES = [
   "⏳ Analyzing your historical weaknesses...",
@@ -198,6 +199,13 @@ export default function DashboardClient() {
   const handleGenerateTest = async (mode: 'full' | 'targeted', targetDomain?: string, targetTopic?: string) => {
     setIsGeneratingTest(true);
 
+    // Figure out how many questions to send based on mode and user's tier
+    const tier = (profile?.subscriptionTier as keyof typeof SUBSCRIPTION_CONFIG) || 'FREE';
+    const config = SUBSCRIPTION_CONFIG[tier] || SUBSCRIPTION_CONFIG.FREE;
+    const questionCount = mode === 'full' 
+        ? config.questionsPerAdaptiveTest   // 30 for full adaptive
+        : config.questionsPerTopicTest;     // 10 for targeted/sectional
+
     sessionStorage.setItem('activeTest', JSON.stringify({
         certificationSlug: selectedExam,
         mode: mode,
@@ -212,7 +220,7 @@ export default function DashboardClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           certificationSlug: selectedExam,
-          questionCount: 5,
+          questionCount: questionCount,    // ← now dynamic, from config
           difficulty: null,
           targetDomain: targetDomain,
           targetTopic: targetTopic
@@ -221,7 +229,6 @@ export default function DashboardClient() {
 
       const data = await response.json();
 
-      // 🚀 THE FIX: CATCH THE 403 PAYWALL HIT
       if (response.status === 403) {
           setPaywallMessage(data.message || "You have reached your free limit.");
           setShowPaywall(true);
@@ -247,7 +254,7 @@ export default function DashboardClient() {
     } finally {
       setIsGeneratingTest(false);
     }
-  };
+};
 
   const handleHistoryClick = (t: any) => {
     sessionStorage.setItem('lastResult', JSON.stringify({

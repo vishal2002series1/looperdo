@@ -80,7 +80,6 @@ export default function AssessmentClient({ testId }: { testId: string }) {
       const result = await response.json();
 
       if (response.ok && result.success) {
-        // Clear the test and move to a results page
         sessionStorage.removeItem('activeTest');
         sessionStorage.setItem('lastResult', JSON.stringify(result));
         router.push('/results'); 
@@ -129,6 +128,18 @@ export default function AssessmentClient({ testId }: { testId: string }) {
             </div>
           )}
 
+          {/* 🚀 Render Figure/Image if the backend provides one */}
+          {currentQuestion.image && (
+            <div className="mb-6 flex justify-center bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <img 
+                src={currentQuestion.image} 
+                alt="Question Figure" 
+                className="max-w-full h-auto object-contain max-h-[400px] rounded shadow-sm"
+              />
+            </div>
+          )}
+
+          {/* Question Text (LaTeX Enabled) */}
           <div className="text-lg font-medium text-[#1e3a5f] mb-6 prose prose-lg max-w-none">
             <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
               {currentQuestion.text}

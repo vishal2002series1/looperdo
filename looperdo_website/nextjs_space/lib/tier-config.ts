@@ -1,10 +1,10 @@
 export const SUBSCRIPTION_CONFIG = {
   FREE: {
-    maxFullAdaptiveTests: 1,
+    maxFullAdaptiveTests: 2,
     maxTopicTests: 3,
     maxStudyModules: 2,
-    questionsPerAdaptiveTest: 30,
-    questionsPerTopicTest: 10,
+    questionsPerAdaptiveTest: 5,
+    questionsPerTopicTest: 5,
     allowedTracks: 1,
   },
   PRO: {

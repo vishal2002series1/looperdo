@@ -1,44 +1,45 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth-options';
-import { db } from '@/lib/db';
+import prisma from '@/lib/prisma'; // <-- FIXED IMPORT
 
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
+
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await req.json();
-    const { tier, track } = body;
+    const { tier, track } = await req.json();
 
-    let unlockedExams: string[] = [];
-    if (tier === "PRO" && track) {
-        unlockedExams = [track];
-    } else if (tier === "ALL_ACCESS") {
-        // Unlock everything
-        unlockedExams = [
-            "AWS Solutions Architect Associate", 
-            "Microsoft Azure Administrator (AZ-104)", 
-            "Google Cloud Associate Cloud Engineer", 
-            "Microsoft Power BI Data Analyst (PL-300)", 
-            "Lean Six Sigma Black Belt (IASSC)", 
-            "PMI Project Management Professional (PMP)"
-        ];
+    // Find the user
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email }
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    await db.user.update({
+    let unlockedExams = user.unlockedExams || [];
+    if (track && !unlockedExams.includes(track)) {
+      unlockedExams.push(track);
+    }
+
+    // Update the user
+    await prisma.user.update({
       where: { email: session.user.email },
-      data: { 
-          subscriptionTier: tier,
-          unlockedExams: unlockedExams
+      data: {
+        subscriptionTier: tier,
+        unlockedExams: unlockedExams
       }
     });
 
-    return NextResponse.json({ success: true, message: `Successfully upgraded to ${tier}` });
+    return NextResponse.json({ success: true, tier });
+
   } catch (error: any) {
-    console.error("Mock Checkout Error:", error);
-    return NextResponse.json({ error: "Failed to process upgrade" }, { status: 500 });
+    console.error('Mock Checkout Error:', error);
+    return NextResponse.json({ error: "Failed to process checkout" }, { status: 500 });
   }
 }

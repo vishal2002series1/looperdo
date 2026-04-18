@@ -1,29 +1,80 @@
-import { NextAuthOptions } from 'next-auth';
+import { NextAuthOptions, DefaultSession, DefaultUser } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
+import CredentialsProvider from 'next-auth/providers/credentials';
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import prisma from '@/lib/prisma';
+import { compare } from 'bcryptjs';
+
+// 🚀 1. This block extends NextAuth types to recognize our custom database fields!
+declare module 'next-auth' {
+  interface Session {
+    user: {
+      id: string;
+      subscriptionTier?: string;
+      countryCode?: string;
+    } & DefaultSession['user'];
+  }
+
+  interface User extends DefaultUser {
+    password?: string | null;
+    subscriptionTier?: string;
+    countryCode?: string;
+  }
+}
 
 export const authOptions: NextAuthOptions = {
-  // 1. Connect NextAuth to our Neon Database
+  // 2. Connect NextAuth to our Neon Database
   adapter: PrismaAdapter(prisma) as any,
   
-  // 2. Register Google as the ONLY provider
+  // 3. Register our Providers (Google AND Email/Password)
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
     }),
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" }
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          return null;
+        }
+
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email }
+        });
+
+        if (!user || !user.password) {
+          return null;
+        }
+
+        const isValid = await compare(credentials.password, user.password);
+
+        if (!isValid) {
+          return null;
+        }
+
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+        };
+      }
+    })
   ],
   
-  // 3. Security Strategy
+  // 4. Security Strategy
   session: { strategy: 'jwt' },
   
-  // 4. Custom Login Page Routing
+  // 5. Custom Login Page Routing
   pages: {
     signIn: '/login', 
   },
   
-  // 5. Token & Session Management
+  // 6. Token & Session Management
   callbacks: {
     async jwt({ token, user }: any) {
       if (user) {
@@ -37,7 +88,7 @@ export const authOptions: NextAuthOptions = {
         
         // Fetch our custom business fields from the database
         const dbUser = await prisma.user.findUnique({
-          where: { id: token.id },
+          where: { id: token.id as string },
           select: { subscriptionTier: true, countryCode: true }
         });
 

@@ -22,6 +22,7 @@ export default function AssessmentClient({ testId }: { testId: string }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(MIN_QUESTION_VIEW_SECONDS);
+  const [viewedQuestions, setViewedQuestions] = useState<Set<number>>(new Set());
 
   // Hook #1: Load the test from sessionStorage on mount
   useEffect(() => {
@@ -56,25 +57,38 @@ export default function AssessmentClient({ testId }: { testId: string }) {
 
   // Hook #2: Reset and run the countdown timer on every new question
   useEffect(() => {
-    if (MIN_QUESTION_VIEW_SECONDS <= 0) {
-      setTimeRemaining(0);
-      return;
-    }
-    
-    setTimeRemaining(MIN_QUESTION_VIEW_SECONDS);
-    
-    const interval = setInterval(() => {
-      setTimeRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    
-    return () => clearInterval(interval);
-  }, [currentQuestionIndex]);
+  // Skip the timer if the feature is disabled
+  if (MIN_QUESTION_VIEW_SECONDS <= 0) {
+    setTimeRemaining(0);
+    return;
+  }
+
+  // Skip the timer if the user has already viewed this question
+  if (viewedQuestions.has(currentQuestionIndex)) {
+    setTimeRemaining(0);
+    return;
+  }
+
+  // First-time view: start the countdown and mark the question as viewed
+  setTimeRemaining(MIN_QUESTION_VIEW_SECONDS);
+  setViewedQuestions((prev) => {
+    const next = new Set(prev);
+    next.add(currentQuestionIndex);
+    return next;
+  });
+
+  const interval = setInterval(() => {
+    setTimeRemaining((prev) => {
+      if (prev <= 1) {
+        clearInterval(interval);
+        return 0;
+      }
+      return prev - 1;
+    });
+  }, 1000);
+
+  return () => clearInterval(interval);
+}, [currentQuestionIndex]);
 
   if (!testData || status === 'loading') {
     return (

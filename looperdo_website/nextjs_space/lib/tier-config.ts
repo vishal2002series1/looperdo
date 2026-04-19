@@ -3,8 +3,8 @@ export const SUBSCRIPTION_CONFIG = {
     maxFullAdaptiveTests: 2,
     maxTopicTests: 3,
     maxStudyModules: 2,
-    questionsPerAdaptiveTest: 5,
-    questionsPerTopicTest: 5,
+    questionsPerAdaptiveTest: 30,
+    questionsPerTopicTest: 10,
     allowedTracks: 1,
   },
   PRO: {

@@ -23,13 +23,38 @@ export default function AssessmentClient({ testId }: { testId: string }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(MIN_QUESTION_VIEW_SECONDS);
 
+  // Hook #1: Load the test from sessionStorage on mount
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.replace('/login');
       return;
     }
+    
+    const storedTest = sessionStorage.getItem('activeTest');
+    if (!storedTest) {
+      alert("Test session expired or not found. Please generate a new test.");
+      router.replace('/dashboard');
+      return;
+    }
+    
+    try {
+      const parsed = JSON.parse(storedTest);
+      // Guard against stale/partial activeTest objects that lack questions
+      if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
+        alert("Test data is incomplete. Please generate a new test.");
+        sessionStorage.removeItem('activeTest');
+        router.replace('/dashboard');
+        return;
+      }
+      setTestData(parsed);
+    } catch (e) {
+      console.error("Failed to parse activeTest:", e);
+      sessionStorage.removeItem('activeTest');
+      router.replace('/dashboard');
+    }
+  }, [status, router]);
 
-  // Reset and run the countdown timer every time the user sees a new question
+  // Hook #2: Reset and run the countdown timer on every new question
   useEffect(() => {
     if (MIN_QUESTION_VIEW_SECONDS <= 0) {
       setTimeRemaining(0);
@@ -50,17 +75,6 @@ export default function AssessmentClient({ testId }: { testId: string }) {
     
     return () => clearInterval(interval);
   }, [currentQuestionIndex]);
-    
-    // Pull the generated test from browser storage
-    const storedTest = sessionStorage.getItem('activeTest');
-    if (storedTest) {
-      setTestData(JSON.parse(storedTest));
-    } else {
-      // If they refresh the page or bypass the dashboard, kick them back
-      alert("Test session expired or not found. Please generate a new test.");
-      router.replace('/dashboard');
-    }
-  }, [status, router]);
 
   if (!testData || status === 'loading') {
     return (
@@ -69,6 +83,8 @@ export default function AssessmentClient({ testId }: { testId: string }) {
       </div>
     );
   }
+
+  
 
   const currentQuestion = testData.questions[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === testData.questions.length - 1;

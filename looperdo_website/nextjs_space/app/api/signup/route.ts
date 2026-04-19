@@ -4,6 +4,9 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 
+import { generateVerificationToken } from '@/lib/tokens';
+import { sendVerificationEmail } from '@/lib/mail';
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -24,7 +27,7 @@ export async function POST(request: Request) {
       data: { 
         name: name ?? '', 
         email, 
-        password: hashedPassword, // 🚀 FIX: Mapped to the correct schema field
+        password: hashedPassword,
         subscriptionTier: "FREE",
         unlockedExams: [],
         testsGenerated: 0,
@@ -32,9 +35,15 @@ export async function POST(request: Request) {
       },
     });
 
-    // 🚀 FIX: Removed studentProfile creation since we merged those fields into the User model
+    // 🚀 FIX: Generate token and send the verification email via Hostinger SMTP
+    const verificationToken = await generateVerificationToken(user.email!);
+    await sendVerificationEmail(verificationToken.email, verificationToken.token);
 
-    return NextResponse.json({ id: user.id, name: user.name, email: user.email }, { status: 201 });
+    // 🚀 FIX: Return a success message instead of auto-logging them in
+    return NextResponse.json({ 
+      message: "Account created! Please check your email to verify your account." 
+    }, { status: 201 });
+
   } catch (error: any) {
     console.error('Signup error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

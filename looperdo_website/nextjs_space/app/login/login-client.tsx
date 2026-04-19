@@ -117,8 +117,15 @@ export default function LoginClient() {
                 />
               </div>
             </div>
+            
+            {/* 🚀 UPDATED PASSWORD FIELD WITH FORGOT PASSWORD LINK */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-sm font-medium text-gray-700">Password</label>
+                <Link href="/forgot-password" className="text-xs font-bold text-[#2563eb] hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
@@ -132,6 +139,7 @@ export default function LoginClient() {
                 />
               </div>
             </div>
+
             <button
               type="submit"
               disabled={loading || isGoogleLoading}

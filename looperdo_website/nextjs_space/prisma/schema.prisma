@@ -38,13 +38,6 @@ model Session {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
-
-  @@unique([identifier, token])
-}
 
 // --------------------------------------
 // BUSINESS & USER MODELS
@@ -104,4 +97,24 @@ model ContactSubmission {
   subject   String
   message   String   @db.Text
   createdAt DateTime @default(now())
+}
+
+// --- SECURITY TOKENS ---
+
+model VerificationToken {
+  id      String   @id @default(cuid())
+  email   String
+  token   String   @unique
+  expires DateTime
+
+  @@unique([email, token])
+}
+
+model PasswordResetToken {
+  id      String   @id @default(cuid())
+  email   String
+  token   String   @unique
+  expires DateTime
+
+  @@unique([email, token])
 }

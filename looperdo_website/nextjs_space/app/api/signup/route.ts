@@ -35,11 +35,36 @@ export async function POST(request: Request) {
       },
     });
 
-    // 🚀 FIX: Generate token and send the verification email via Hostinger SMTP
+    // 1. Generate token and send the verification email
     const verificationToken = await generateVerificationToken(user.email!);
     await sendVerificationEmail(verificationToken.email, verificationToken.token);
 
-    // 🚀 FIX: Return a success message instead of auto-logging them in
+    // 🚀 NEW: 2. Add user to Brevo CRM silently in the background
+    if (process.env.BREVO_API_KEY) {
+      try {
+        await fetch('https://api.brevo.com/v3/contacts', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'api-key': process.env.BREVO_API_KEY
+          },
+          body: JSON.stringify({
+            email: user.email,
+            attributes: {
+              // Split the name into First and Last for cleaner CRM data
+              FIRSTNAME: user.name?.split(' ')[0] || 'Student',
+              LASTNAME: user.name?.split(' ').slice(1).join(' ') || ''
+            },
+            updateEnabled: true // If they exist, just update them rather than throwing an error
+          })
+        });
+      } catch (brevoError) {
+        console.error('Brevo CRM Sync Error:', brevoError);
+        // We purposely do not return an error here so the signup still completes successfully!
+      }
+    }
+
     return NextResponse.json({ 
       message: "Account created! Please check your email to verify your account." 
     }, { status: 201 });

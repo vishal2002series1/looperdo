@@ -5,7 +5,6 @@ import prisma from '@/lib/prisma';
 import { SUBSCRIPTION_CONFIG } from '@/lib/tier-config';
 
 export const dynamic = 'force-dynamic';
-// 🚀 FIX: Removed maxDuration entirely. This route now executes in milliseconds using polling!
 
 export async function POST(req: Request) {
   try {
@@ -59,9 +58,9 @@ export async function POST(req: Request) {
     };
 
     const lambdaUrl = process.env.AWS_LAMBDA_URL;
-    if (!lambdaUrl) throw new Error("AWS_LAMBDA_URL is missing in .env");
+    if (!lambdaUrl) throw new Error("Backend URL is missing in configuration.");
 
-    // 🚀 We send the request. AWS returns instantly now.
+    // 🚀 We send the request. The backend returns instantly now.
     const lambdaResponse = await fetch(lambdaUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -69,9 +68,8 @@ export async function POST(req: Request) {
     });
 
     if (!lambdaResponse.ok) {
-      const errorText = await lambdaResponse.text();
-      console.error("Lambda Generate Error:", errorText);
-      return NextResponse.json({ error: "Failed to generate test from AI backend" }, { status: 500 });
+      console.error("Backend Generate Error:", await lambdaResponse.text());
+      return NextResponse.json({ error: "Failed to configure test session." }, { status: 500 });
     }
 
     let rawResponseText = await lambdaResponse.text();
@@ -85,20 +83,20 @@ export async function POST(req: Request) {
              aiData = parsedResponse;
         }
     } catch (e) {
-        console.error("Failed to parse Lambda response:", e);
-        return NextResponse.json({ error: "Invalid response format from AI" }, { status: 500 });
+        console.error("Failed to parse response:", e);
+        return NextResponse.json({ error: "Invalid response format received." }, { status: 500 });
     }
 
-    // 🚀 NEW LOGIC: Check if AWS is still working in the background
+    // 🚀 Check if the backend is still working
     if (aiData.status === "generating") {
         return NextResponse.json({
             status: "generating",
             progress: aiData.progress || 5,
-            message: aiData.message || "Working..."
+            message: aiData.message || "Working..." // Frontend ignores this and uses its own logic
         }, { status: 200 });
     }
 
-    // 🚀 NEW LOGIC: AWS is finished! Now we increment the database usage counter.
+    // 🚀 Test is finished! Now we increment the database usage counter.
     if (aiData.status === "ready" || aiData.questions) {
         await prisma.user.update({
             where: { email: userEmail },
@@ -116,7 +114,7 @@ export async function POST(req: Request) {
         });
     }
 
-    return NextResponse.json({ error: "Unknown status received from AI engine." }, { status: 500 });
+    return NextResponse.json({ error: "Unknown status received from testing engine." }, { status: 500 });
 
   } catch (error: any) {
     console.error('Generate test error:', error);

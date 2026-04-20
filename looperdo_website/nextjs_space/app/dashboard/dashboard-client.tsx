@@ -60,10 +60,10 @@ export default function DashboardClient() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🚀 REAL-TIME PROGRESS STATES
+  // 🚀 REAL-TIME PROGRESS STATES (Removed AI references)
   const [isGeneratingTest, setIsGeneratingTest] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
-  const [generationMessage, setGenerationMessage] = useState("Initializing AI Engine...");
+  const [generationMessage, setGenerationMessage] = useState("Initializing your personalized session...");
 
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallMessage, setPaywallMessage] = useState("");
@@ -168,7 +168,7 @@ export default function DashboardClient() {
   const handleGenerateTest = async (mode: 'full' | 'targeted', targetDomain?: string, targetTopic?: string) => {
     setIsGeneratingTest(true);
     setGenerationProgress(0);
-    setGenerationMessage("Sending request to AI backend...");
+    setGenerationMessage("Assessing your performance history...");
 
     const tier = (profile?.subscriptionTier as keyof typeof SUBSCRIPTION_CONFIG) || 'FREE';
     const config = SUBSCRIPTION_CONFIG[tier] || SUBSCRIPTION_CONFIG.FREE;
@@ -183,7 +183,6 @@ export default function DashboardClient() {
     sessionStorage.setItem('lastViewedExam', selectedExam);
 
     try {
-      // 🚀 REAL POLLING LOOP
       while (true) {
         const response = await fetch('/api/generate-test', {
           method: 'POST',
@@ -207,17 +206,31 @@ export default function DashboardClient() {
             break;
         }
 
-        // 2. Generation Ongoing (Update UI and wait 3 seconds)
+        // 2. Generation Ongoing (Update UI with custom USP messages and wait 3 seconds)
         if (data.status === "generating") {
-            setGenerationProgress(data.progress || 5);
-            setGenerationMessage(data.message || "AI is working...");
+            const prog = data.progress || 5;
+            setGenerationProgress(prog);
+            
+            // 🚀 Marketing Messages mapped to progress percentage
+            if (prog < 20) {
+                setGenerationMessage("Assessing your performance history...");
+            } else if (prog < 40) {
+                setGenerationMessage("Identifying key improvement areas...");
+            } else if (prog < 60) {
+                setGenerationMessage("Gathering targeted questions...");
+            } else if (prog < 80) {
+                setGenerationMessage("Configuring adaptive difficulty levels...");
+            } else {
+                setGenerationMessage("Personalizing test for your profile...");
+            }
+            
             await new Promise(resolve => setTimeout(resolve, 3000)); // Sleep for 3 seconds
         } 
         
         // 3. Test Ready! (Break loop and navigate)
         else if (data.status === "ready" || data.questions?.length > 0) {
             setGenerationProgress(100);
-            setGenerationMessage("Test Ready!");
+            setGenerationMessage("Your bespoke test is ready!");
             
             sessionStorage.setItem('activeTest', JSON.stringify({
                testId: data.testId,
@@ -226,7 +239,6 @@ export default function DashboardClient() {
                timeLimit: data.timeLimit
             }));
             
-            // Brief pause so user sees 100% completion before redirecting
             setTimeout(() => {
                 router.push(`/assessment/${data.testId}`);
             }, 500);
@@ -235,7 +247,7 @@ export default function DashboardClient() {
         
         // 4. Error Condition
         else {
-            const errMsg = data.error ?? "Unknown error from AI engine";
+            const errMsg = data.error ?? "An error occurred while configuring your test.";
             console.error("Failed:", errMsg);
             alert(`Generation Failed: ${errMsg}`);
             setIsGeneratingTest(false);
@@ -244,7 +256,7 @@ export default function DashboardClient() {
       }
     } catch (error) {
       console.error("Network error:", error);
-      alert("Network error connecting to AI engine.");
+      alert("Network error connecting to testing engine.");
       setIsGeneratingTest(false);
     }
   };

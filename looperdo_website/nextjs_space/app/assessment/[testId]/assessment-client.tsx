@@ -23,6 +23,9 @@ export default function AssessmentClient({ testId }: { testId: string }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(MIN_QUESTION_VIEW_SECONDS);
   const [viewedQuestions, setViewedQuestions] = useState<Set<number>>(new Set());
+  
+  // 🚀 FIX: New state to track when local storage restoration is finished
+  const [isRestored, setIsRestored] = useState(false);
 
   // Hook #1: Load the test from sessionStorage on mount
   useEffect(() => {
@@ -40,65 +43,109 @@ export default function AssessmentClient({ testId }: { testId: string }) {
     
     try {
       const parsed = JSON.parse(storedTest);
-      // Guard against stale/partial activeTest objects that lack questions
       if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
         alert("Test data is incomplete. Please generate a new test.");
         sessionStorage.removeItem('activeTest');
         router.replace('/dashboard');
         return;
       }
+      
       setTestData(parsed);
+
+      // RESTORE PROGRESS FROM LOCAL STORAGE
+      const certSlug = parsed.certificationSlug;
+      const savedStateStr = localStorage.getItem(`looperdo_progress_${certSlug}`);
+      
+      if (savedStateStr) {
+        try {
+          const savedState = JSON.parse(savedStateStr);
+          
+          // Verify these answers belong to THIS exact test batch
+          const savedAnswerKeys = Object.keys(savedState.answers || {});
+          const currentQuestionIds = parsed.questions.map((q: any) => q.id);
+          const isSameTest = savedAnswerKeys.length === 0 || savedAnswerKeys.some(id => currentQuestionIds.includes(id));
+
+          if (isSameTest) {
+            setAnswers(savedState.answers || {});
+            setViewedQuestions(new Set(savedState.viewedQuestions || []));
+          } else {
+             // Wipe stale cache if the AI generated a brand new test for the same track
+             localStorage.removeItem(`looperdo_progress_${certSlug}`);
+          }
+        } catch (e) {
+           console.error("Failed to parse saved progress");
+        }
+      }
     } catch (e) {
       console.error("Failed to parse activeTest:", e);
       sessionStorage.removeItem('activeTest');
       router.replace('/dashboard');
+    } finally {
+      // 🚀 FIX: Tell the rest of the app that restoration is complete
+      setIsRestored(true);
     }
   }, [status, router]);
 
+  // AUTO-SAVE PROGRESS HOOK
+  useEffect(() => {
+    if (!testData || !testData.certificationSlug) return;
+    
+    if (Object.keys(answers).length > 0 || viewedQuestions.size > 0) {
+      const stateToSave = {
+        answers,
+        viewedQuestions: Array.from(viewedQuestions) // Sets cannot be stringified directly
+      };
+      localStorage.setItem(`looperdo_progress_${testData.certificationSlug}`, JSON.stringify(stateToSave));
+    }
+  }, [answers, viewedQuestions, testData]);
+
+
   // Hook #2: Reset and run the countdown timer on every new question
   useEffect(() => {
-  // Skip the timer if the feature is disabled
-  if (MIN_QUESTION_VIEW_SECONDS <= 0) {
-    setTimeRemaining(0);
-    return;
-  }
+    // 🚀 FIX: Do not run this timer logic until the cache is fully loaded
+    if (!isRestored) return;
 
-  // Skip the timer if the user has already viewed this question
-  if (viewedQuestions.has(currentQuestionIndex)) {
-    setTimeRemaining(0);
-    return;
-  }
+    if (MIN_QUESTION_VIEW_SECONDS <= 0) {
+      setTimeRemaining(0);
+      return;
+    }
 
-  // First-time view: start the countdown and mark the question as viewed
-  setTimeRemaining(MIN_QUESTION_VIEW_SECONDS);
-  setViewedQuestions((prev) => {
-    const next = new Set(prev);
-    next.add(currentQuestionIndex);
-    return next;
-  });
+    if (viewedQuestions.has(currentQuestionIndex)) {
+      setTimeRemaining(0);
+      return;
+    }
 
-  const interval = setInterval(() => {
-    setTimeRemaining((prev) => {
-      if (prev <= 1) {
-        clearInterval(interval);
-        return 0;
-      }
-      return prev - 1;
+    setTimeRemaining(MIN_QUESTION_VIEW_SECONDS);
+    setViewedQuestions((prev) => {
+      const next = new Set(prev);
+      next.add(currentQuestionIndex);
+      return next;
     });
-  }, 1000);
 
-  return () => clearInterval(interval);
-}, [currentQuestionIndex]);
+    const interval = setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
-  if (!testData || status === 'loading') {
+    return () => clearInterval(interval);
+    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentQuestionIndex, isRestored]); 
+  // 🚀 FIX: Added isRestored as a dependency so it triggers once loading finishes
+
+  // 🚀 FIX: Also wait for isRestored before showing the UI
+  if (!testData || status === 'loading' || !isRestored) {
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
         <Loader2 className="w-8 h-8 animate-spin text-[#2563eb]" />
       </div>
     );
   }
-
-  
 
   const currentQuestion = testData.questions[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === testData.questions.length - 1;
@@ -134,7 +181,7 @@ export default function AssessmentClient({ testId }: { testId: string }) {
       const result = await response.json();
 
       if (response.ok && result.success) {
-        // sessionStorage.removeItem('activeTest');
+        localStorage.removeItem(`looperdo_progress_${testData.certificationSlug}`);
         sessionStorage.setItem('lastResult', JSON.stringify(result));
         router.push('/results'); 
       } else {
@@ -182,7 +229,7 @@ export default function AssessmentClient({ testId }: { testId: string }) {
             </div>
           )}
 
-          {/* 🚀 Render Figure/Image if the backend provides one */}
+          {/* Render Figure/Image if the backend provides one */}
           {currentQuestion.image && (
             <div className="mb-6 flex justify-center bg-gray-50 p-4 rounded-lg border border-gray-200">
               <img 

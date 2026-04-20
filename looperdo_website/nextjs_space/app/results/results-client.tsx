@@ -79,7 +79,7 @@ export default function ResultsClient() {
   const [isGeneratingWorkbook, setIsGeneratingWorkbook] = useState(false);
   const [workbookMessageIndex, setWorkbookMessageIndex] = useState(0);
   const [activeWorkbook, setActiveWorkbook] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState('theory'); 
+  const [activeTab, setActiveTab] = useState('videos'); 
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
 
   // 🚀 ADDED PAYWALL STATE
@@ -203,7 +203,7 @@ export default function ResultsClient() {
       return;
     }
     setIsGeneratingWorkbook(true);
-    setActiveTab('theory'); 
+    setActiveTab('videos'); 
     try {
       const response = await fetch('/api/build-module', {
         method: 'POST',
@@ -420,7 +420,7 @@ export default function ResultsClient() {
               </div>
               
               <div className="flex border-b px-6 shrink-0 bg-white overflow-x-auto">
-                  {['theory', 'map', 'tricks', 'videos', 'practice'].map((tab) => (
+                  {['videos', 'theory', 'tricks', 'map', 'practice'].map((tab) => (
                       <button 
                           key={tab}
                           onClick={() => setActiveTab(tab)}

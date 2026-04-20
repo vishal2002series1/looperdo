@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
-  // Extract the country code from Vercel's edge headers.
-  // If running locally on your machine, this header is missing, so we default to 'US'.
-  const country = request.headers.get('x-vercel-ip-country') || 'US';
+  // Extract the country code from Cloudflare (Hostinger) or Vercel's edge headers.
+  // Cloudflare uses 'cf-ipcountry'. Vercel uses 'x-vercel-ip-country'.
+  // If running locally on your machine, these headers are missing, so we default to 'US'.
+  const country = request.headers.get('cf-ipcountry') || request.headers.get('x-vercel-ip-country') || 'US';
 
   const response = NextResponse.next();
 

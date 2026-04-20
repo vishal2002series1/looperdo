@@ -118,3 +118,14 @@ model PasswordResetToken {
 
   @@unique([email, token])
 }
+
+// --------------------------------------
+// PRICING CONFIGURATION
+// --------------------------------------
+model RegionalPricing {
+  id               String @id @default(cuid())
+  countryCode      String @unique // e.g., "US", "IN", "ROW"
+  currencySymbol   String // e.g., "$", "₹"
+  proPrice         String // e.g., "19", "1550"
+  allAccessPrice   String // e.g., "49", "3900"
+}

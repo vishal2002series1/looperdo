@@ -10,12 +10,26 @@ import SectionReveal from '@/components/section-reveal';
 export default function ProfileClient() {
   const { data: session, status } = useSession() || {};
   const router = useRouter();
+  const [dbTier, setDbTier] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.replace('/login');
     }
   }, [status, router]);
+
+  useEffect(() => {
+    if (status === 'authenticated') {
+      fetch('/api/student-profile', { cache: 'no-store' })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.subscriptionTier) {
+              setDbTier(data.subscriptionTier);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [status]);
 
   if (status === 'loading') {
     return (
@@ -26,6 +40,9 @@ export default function ProfileClient() {
   }
 
   if (status === 'unauthenticated') return null;
+
+  const activeTier = dbTier || (session?.user as any)?.subscriptionTier || 'FREE';
+  const displayTierName = activeTier === 'ALL_ACCESS' ? 'All-Access' : activeTier === 'PRO' ? 'Pro' : 'Free';
 
   return (
     <div className="bg-gray-50/50 min-h-[80vh]">
@@ -46,6 +63,13 @@ export default function ProfileClient() {
               <div>
                 <h2 className="text-lg font-bold text-[#1e3a5f]">{session?.user?.name ?? 'Student'}</h2>
                 <p className="text-sm text-gray-500">{session?.user?.email ?? ''}</p>
+                <span className={`inline-block mt-2 px-2 py-1 text-[10px] font-bold rounded ${
+                    activeTier === 'ALL_ACCESS' ? 'bg-purple-100 text-purple-700' :
+                    activeTier === 'PRO' ? 'bg-blue-100 text-blue-700' :
+                    'bg-gray-100 text-gray-600'
+                }`}>
+                    {displayTierName.toUpperCase()} PLAN
+                </span>
               </div>
             </div>
 
@@ -53,8 +77,8 @@ export default function ProfileClient() {
               {[
                 { icon: User, label: 'Full Name', value: session?.user?.name ?? 'Not set' },
                 { icon: Mail, label: 'Email Address', value: session?.user?.email ?? 'Not set' },
-                { icon: Shield, label: 'Account Type', value: 'Free Plan' },
-                { icon: Calendar, label: 'Member Since', value: 'March 2026' },
+                { icon: Shield, label: 'Account Type', value: `${displayTierName} Plan` },
+                { icon: Calendar, label: 'Member Since', value: '2026' },
               ].map((item: any, i: number) => {
                 const Icon = item?.icon ?? User;
                 return (

@@ -5,9 +5,7 @@ import prisma from '@/lib/prisma';
 import { SUBSCRIPTION_CONFIG } from '@/lib/tier-config';
 
 export const dynamic = 'force-dynamic';
-// export const maxDuration = 9; 
-export const maxDuration = 300;  // 5 minutes; raise if needed, max 800 on Pro
-
+// 🚀 FIX: Removed maxDuration entirely. This route now executes in milliseconds using polling!
 
 export async function POST(req: Request) {
   try {
@@ -63,6 +61,7 @@ export async function POST(req: Request) {
     const lambdaUrl = process.env.AWS_LAMBDA_URL;
     if (!lambdaUrl) throw new Error("AWS_LAMBDA_URL is missing in .env");
 
+    // 🚀 We send the request. AWS returns instantly now.
     const lambdaResponse = await fetch(lambdaUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -74,12 +73,6 @@ export async function POST(req: Request) {
       console.error("Lambda Generate Error:", errorText);
       return NextResponse.json({ error: "Failed to generate test from AI backend" }, { status: 500 });
     }
-
-    // --- 🚀 UPDATE USAGE IF SUCCESSFUL ---
-    await prisma.user.update({
-        where: { email: userEmail },
-        data: { testsGenerated: dbUser.testsGenerated + 1 }
-    });
 
     let rawResponseText = await lambdaResponse.text();
     let aiData: any = {};
@@ -96,14 +89,34 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Invalid response format from AI" }, { status: 500 });
     }
 
-    return NextResponse.json({
-      testId: `test_${Date.now()}`, 
-      certificationSlug: targetExam,
-      difficulty: difficulty ?? 'adaptive',
-      questions: aiData.questions || [], 
-      timeLimit: count * 90, 
-      sessionRestored: aiData.session_restored 
-    });
+    // 🚀 NEW LOGIC: Check if AWS is still working in the background
+    if (aiData.status === "generating") {
+        return NextResponse.json({
+            status: "generating",
+            progress: aiData.progress || 5,
+            message: aiData.message || "Working..."
+        }, { status: 200 });
+    }
+
+    // 🚀 NEW LOGIC: AWS is finished! Now we increment the database usage counter.
+    if (aiData.status === "ready" || aiData.questions) {
+        await prisma.user.update({
+            where: { email: userEmail },
+            data: { testsGenerated: dbUser.testsGenerated + 1 }
+        });
+
+        return NextResponse.json({
+          status: "ready",
+          testId: `test_${Date.now()}`, 
+          certificationSlug: targetExam,
+          difficulty: difficulty ?? 'adaptive',
+          questions: aiData.questions || [], 
+          timeLimit: count * 90, 
+          sessionRestored: aiData.session_restored 
+        });
+    }
+
+    return NextResponse.json({ error: "Unknown status received from AI engine." }, { status: 500 });
 
   } catch (error: any) {
     console.error('Generate test error:', error);

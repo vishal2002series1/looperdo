@@ -9,14 +9,6 @@ import ReadinessGauge from '@/components/readiness-gauge';
 import SectionReveal from '@/components/section-reveal';
 import { SUBSCRIPTION_CONFIG } from '@/lib/tier-config';
 
-const LOADING_MESSAGES = [
-  "⏳ Analyzing your historical weaknesses...",
-  "🔍 Checking the database for existing matches...",
-  "✍️ Drafting highly calibrated questions...",
-  "🧐 Running quality assurance and formatting checks...",
-  "🔄 Refining the question batch..."
-];
-
 const AVAILABLE_EXAMS = [
   "AWS Solutions Architect Associate",
   "Microsoft Azure Administrator (AZ-104)",
@@ -68,8 +60,10 @@ export default function DashboardClient() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  // 🚀 REAL-TIME PROGRESS STATES
   const [isGeneratingTest, setIsGeneratingTest] = useState(false);
-  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [generationMessage, setGenerationMessage] = useState("Initializing AI Engine...");
 
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallMessage, setPaywallMessage] = useState("");
@@ -82,7 +76,6 @@ export default function DashboardClient() {
   const [isFetchingProgress, setIsFetchingProgress] = useState(false);
   const [overallScore, setOverallScore] = useState(0);
 
-  // ✅ ALWAYS RUN HOOKS AT THE TOP
   useEffect(() => {
     setMounted(true);
     const savedExam = sessionStorage.getItem('lastViewedExam');
@@ -120,7 +113,6 @@ export default function DashboardClient() {
           const res = await fetch('/api/history', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            // 🚀 FIX: Added optional chaining and a fallback for TypeScript
             body: JSON.stringify({ student_id: session?.user?.name?.split(' ')[0] || "Student" })
           });
           const json = await res.json();
@@ -142,7 +134,6 @@ export default function DashboardClient() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              // 🚀 FIX: Added optional chaining and a fallback for TypeScript
               student_id: session?.user?.name?.split(' ')[0] || "Student",
               target_exam: selectedExam
             })
@@ -164,24 +155,10 @@ export default function DashboardClient() {
       fetchProgress();
     }
   }, [selectedExam, status, session]);
-  
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isGeneratingTest) {
-      interval = setInterval(() => {
-        setLoadingMessageIndex((prev) => (prev + 1) % 5);
-      }, 2500);
-    } else {
-      setLoadingMessageIndex(0);
-    }
-    return () => clearInterval(interval);
-  }, [isGeneratingTest]);
 
-  // ✅ SAFELY COMPUTE DERIVED DATA
   const filteredHistory = useMemo(() => {
     return testHistory.filter((t: any) => t.exam === selectedExam);
   }, [testHistory, selectedExam]);
-
 
   const handleExamChange = (exam: string) => {
     setSelectedExam(exam);
@@ -190,6 +167,8 @@ export default function DashboardClient() {
 
   const handleGenerateTest = async (mode: 'full' | 'targeted', targetDomain?: string, targetTopic?: string) => {
     setIsGeneratingTest(true);
+    setGenerationProgress(0);
+    setGenerationMessage("Sending request to AI backend...");
 
     const tier = (profile?.subscriptionTier as keyof typeof SUBSCRIPTION_CONFIG) || 'FREE';
     const config = SUBSCRIPTION_CONFIG[tier] || SUBSCRIPTION_CONFIG.FREE;
@@ -204,43 +183,68 @@ export default function DashboardClient() {
     sessionStorage.setItem('lastViewedExam', selectedExam);
 
     try {
-      const response = await fetch('/api/generate-test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          certificationSlug: selectedExam,
-          questionCount: questionCount,
-          difficulty: null,
-          targetDomain: targetDomain,
-          targetTopic: targetTopic
-        }),
-      });
+      // 🚀 REAL POLLING LOOP
+      while (true) {
+        const response = await fetch('/api/generate-test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            certificationSlug: selectedExam,
+            questionCount: questionCount,
+            difficulty: null,
+            targetDomain: targetDomain,
+            targetTopic: targetTopic
+          }),
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (response.status === 403) {
-          setPaywallMessage(data.message || "You have reached your free limit.");
-          setShowPaywall(true);
-          return;
-      }
+        // 1. Paywall Check
+        if (response.status === 403) {
+            setPaywallMessage(data.message || "You have reached your free limit.");
+            setShowPaywall(true);
+            setIsGeneratingTest(false);
+            break;
+        }
 
-      if (response.ok && data.questions?.length > 0) {
-        sessionStorage.setItem('activeTest', JSON.stringify({
-           testId: data.testId,
-           certificationSlug: data.certificationSlug || selectedExam,
-           questions: data.questions,
-           timeLimit: data.timeLimit
-        }));
-        router.push(`/assessment/${data.testId}`);
-      } else {
-        const errMsg = data.error ?? "Unknown error from AI engine";
-        console.error("Failed:", errMsg);
-        alert(`Generation Failed: ${errMsg}`);
+        // 2. Generation Ongoing (Update UI and wait 3 seconds)
+        if (data.status === "generating") {
+            setGenerationProgress(data.progress || 5);
+            setGenerationMessage(data.message || "AI is working...");
+            await new Promise(resolve => setTimeout(resolve, 3000)); // Sleep for 3 seconds
+        } 
+        
+        // 3. Test Ready! (Break loop and navigate)
+        else if (data.status === "ready" || data.questions?.length > 0) {
+            setGenerationProgress(100);
+            setGenerationMessage("Test Ready!");
+            
+            sessionStorage.setItem('activeTest', JSON.stringify({
+               testId: data.testId,
+               certificationSlug: data.certificationSlug || selectedExam,
+               questions: data.questions,
+               timeLimit: data.timeLimit
+            }));
+            
+            // Brief pause so user sees 100% completion before redirecting
+            setTimeout(() => {
+                router.push(`/assessment/${data.testId}`);
+            }, 500);
+            break;
+        } 
+        
+        // 4. Error Condition
+        else {
+            const errMsg = data.error ?? "Unknown error from AI engine";
+            console.error("Failed:", errMsg);
+            alert(`Generation Failed: ${errMsg}`);
+            setIsGeneratingTest(false);
+            break;
+        }
       }
     } catch (error) {
       console.error("Network error:", error);
       alert("Network error connecting to AI engine.");
-    } finally {
       setIsGeneratingTest(false);
     }
   };
@@ -259,8 +263,6 @@ export default function DashboardClient() {
     router.push('/results');
   };
 
-
-  // ✅ NO EARLY RETURNS! HANDLE LOADING STATES INSIDE THE MAIN RENDER
   if (!mounted || status === 'loading' || loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -269,9 +271,7 @@ export default function DashboardClient() {
     );
   }
 
-  if (status === 'unauthenticated') {
-     return null; // Will redirect via useEffect
-  }
+  if (status === 'unauthenticated') return null;
 
   return (
     <div className="bg-gray-50/50 min-h-screen relative pb-20">
@@ -298,13 +298,27 @@ export default function DashboardClient() {
         {isGeneratingTest && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[150] bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center"
+            className="fixed inset-0 z-[150] bg-white/95 backdrop-blur-md flex flex-col items-center justify-center p-6"
           >
-            <Loader2 className="w-12 h-12 animate-spin text-[#2563eb] mb-6" />
-            <h2 className="text-2xl font-bold text-[#1e3a5f] mb-2">Building Your Adaptive Test</h2>
-            <p className="text-lg text-blue-600 font-medium animate-pulse transition-opacity duration-500 text-center px-4 max-w-md">
-              {LOADING_MESSAGES[loadingMessageIndex]}
-            </p>
+            <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-100 max-w-md w-full text-center">
+                <Loader2 className="w-12 h-12 animate-spin text-[#2563eb] mb-6 mx-auto" />
+                <h2 className="text-2xl font-bold text-[#1e3a5f] mb-4">Building Adaptive Test</h2>
+                
+                {/* 🚀 REAL-TIME PROGRESS BAR UI */}
+                <div className="w-full bg-gray-100 rounded-full h-3 mb-4 overflow-hidden">
+                  <motion.div 
+                    className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full" 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${generationProgress}%` }}
+                    transition={{ duration: 0.5 }}
+                  />
+                </div>
+                
+                <p className="text-sm font-semibold text-gray-500 mb-1">{generationProgress}% Complete</p>
+                <p className="text-lg text-blue-600 font-medium animate-pulse">
+                  {generationMessage}
+                </p>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

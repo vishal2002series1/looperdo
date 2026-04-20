@@ -4,7 +4,7 @@ import PricingClient from './pricing-client';
 export default function PricingPage() {
   // Read the cookie securely set by our Edge Middleware!
   const cookieStore = cookies();
-  const country = cookieStore.get('user-country')?.value || 'US';
+  const country = cookieStore.get('user-country')?.value || 'IN';
 
   return <PricingClient countryCode={country} />;
 }

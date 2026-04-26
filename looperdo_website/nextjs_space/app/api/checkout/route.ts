@@ -19,6 +19,7 @@ type Tier = keyof typeof PRODUCT_MAP;
 const DODO_BASE = process.env.DODO_API_BASE || 'https://test.dodopayments.com';
 
 export async function POST(req: Request) {
+  console.log('=== ROUTE VERSION 2026-04-27-A ===');
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {

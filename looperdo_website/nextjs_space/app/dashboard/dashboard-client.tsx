@@ -99,6 +99,19 @@ export default function DashboardClient() {
                router.replace('/onboarding');
            } else {
                setProfile(data ?? null);
+               
+               // 🚀 DYNAMIC EXAM ROUTING FIX
+               // Automatically switch the dashboard to their unlocked exam
+               const savedExam = sessionStorage.getItem('lastViewedExam');
+               const isAllAccess = data?.subscriptionTier === "ALL_ACCESS";
+               
+               if (!isAllAccess && data?.unlockedExams?.length > 0) {
+                   // If they have no saved exam, OR their saved exam is locked, force it to their unlocked one
+                   if (!savedExam || !data.unlockedExams.includes(savedExam)) {
+                       setSelectedExam(data.unlockedExams[0]);
+                       sessionStorage.setItem('lastViewedExam', data.unlockedExams[0]);
+                   }
+               }
            }
         })
         .catch(() => setProfile(null))

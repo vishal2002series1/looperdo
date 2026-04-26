@@ -35,20 +35,25 @@ export async function POST(req: Request) {
         : PRODUCT_MAP[tier as keyof typeof PRODUCT_MAP].DEFAULT;
 
     // Create the Checkout Session with Dodo Payments
-    const dodoResponse = await fetch('https://api.dodopayments.com/v1/payments', {
+    // Use test.dodopayments.com for testing (change to live.dodopayments.com for production!)
+    const dodoResponse = await fetch('https://test.dodopayments.com/checkouts', {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${process.env.DODO_PAYMENTS_API_KEY}`,
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            product_id: productId,
-            quantity: 1,
+            // 🚀 Dodo expects a product_cart array
+            product_cart: [
+                {
+                    product_id: productId,
+                    quantity: 1
+                }
+            ],
             customer: {
                 email: session.user.email,
                 name: session.user.name || 'Student'
             },
-            // Where to send them after they pay successfully
             return_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?payment=success`,
         })
     });
@@ -60,8 +65,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Failed to create checkout" }, { status: 500 });
     }
 
-    // Send the secure checkout link back to the frontend
-    return NextResponse.json({ checkoutUrl: paymentData.payment_link });
+    // 🚀 Dodo returns 'checkout_url', not 'payment_link'
+    return NextResponse.json({ checkoutUrl: paymentData.checkout_url });
 
   } catch (error) {
     console.error("Checkout Error:", error);

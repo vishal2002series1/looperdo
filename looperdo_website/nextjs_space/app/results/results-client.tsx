@@ -577,6 +577,7 @@ export default function ResultsClient() {
         )}
       </AnimatePresence>
 
-    </div>
+
+    </div> 
   );
 }

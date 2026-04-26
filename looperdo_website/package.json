@@ -1,7 +1,7 @@
 {
   "name": "looperdo-root",
   "scripts": {
-    "build": "cd looperdo_website/nextjs_space && npm install --legacy-peer-deps && npm run build",
+    "build": "cd looperdo_website/nextjs_space && rm -rf .next && npm install && npm run build",
     "start": "cd looperdo_website/nextjs_space && npm run start"
   },
   "dependencies": {

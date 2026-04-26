@@ -30,27 +30,27 @@ export default function PricingClient({ countryCode, currentTier, pricingData }:
   const handleUpgrade = async (tier: string) => {
     setIsProcessing(tier);
     try {
-      const res = await fetch('/api/mock-checkout', {
+      // 🚀 Point this to our new checkout API
+      const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            tier: tier,
-            track: tier === 'PRO' ? sessionStorage.getItem('lastViewedExam') || 'AWS Solutions Architect Associate' : null
-        })
+        body: JSON.stringify({ tier: tier })
       });
 
-      if (res.ok) {
-        await update(); 
-        window.location.href = '/dashboard'; // Force full reload to update server state
+      const data = await res.json();
+
+      if (res.ok && data.checkoutUrl) {
+        // 🚀 Redirect the user to Dodo's secure hosted payment page!
+        window.location.href = data.checkoutUrl;
       } else {
-        alert("Failed to process upgrade.");
+        alert("Failed to initiate checkout.");
+        setIsProcessing(null);
       }
     } catch (e) {
       console.error(e);
       alert("Network error during checkout.");
-    } finally {
       setIsProcessing(null);
-    }
+    } 
   };
 
   return (

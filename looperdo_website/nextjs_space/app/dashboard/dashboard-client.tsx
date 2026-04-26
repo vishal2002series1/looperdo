@@ -60,7 +60,6 @@ export default function DashboardClient() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🚀 REAL-TIME PROGRESS STATES (Removed AI references)
   const [isGeneratingTest, setIsGeneratingTest] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generationMessage, setGenerationMessage] = useState("Initializing your personalized session...");
@@ -90,6 +89,7 @@ export default function DashboardClient() {
     }
   }, [status, router]);
 
+  // 🚀 THIS IS THE DYNAMIC ROUTING FIX
   useEffect(() => {
     if (status === 'authenticated') {
       fetch('/api/student-profile')
@@ -100,8 +100,7 @@ export default function DashboardClient() {
            } else {
                setProfile(data ?? null);
                
-               // 🚀 DYNAMIC EXAM ROUTING FIX
-               // Automatically switch the dashboard to their unlocked exam
+               // Instantly switch dashboard to their unlocked exam
                const savedExam = sessionStorage.getItem('lastViewedExam');
                const isAllAccess = data?.subscriptionTier === "ALL_ACCESS";
                
@@ -211,7 +210,6 @@ export default function DashboardClient() {
 
         const data = await response.json();
 
-        // 1. Paywall Check
         if (response.status === 403) {
             setPaywallMessage(data.message || "You have reached your free limit.");
             setShowPaywall(true);
@@ -219,12 +217,10 @@ export default function DashboardClient() {
             break;
         }
 
-        // 2. Generation Ongoing (Update UI with custom USP messages and wait 3 seconds)
         if (data.status === "generating") {
             const prog = data.progress || 5;
             setGenerationProgress(prog);
             
-            // 🚀 Marketing Messages mapped to progress percentage
             if (prog < 20) {
                 setGenerationMessage("Assessing your performance history...");
             } else if (prog < 40) {
@@ -237,10 +233,8 @@ export default function DashboardClient() {
                 setGenerationMessage("Personalizing test for your profile...");
             }
             
-            await new Promise(resolve => setTimeout(resolve, 3000)); // Sleep for 3 seconds
+            await new Promise(resolve => setTimeout(resolve, 3000));
         } 
-        
-        // 3. Test Ready! (Break loop and navigate)
         else if (data.status === "ready" || data.questions?.length > 0) {
             setGenerationProgress(100);
             setGenerationMessage("Your bespoke test is ready!");
@@ -257,8 +251,6 @@ export default function DashboardClient() {
             }, 500);
             break;
         } 
-        
-        // 4. Error Condition
         else {
             const errMsg = data.error ?? "An error occurred while configuring your test.";
             console.error("Failed:", errMsg);
@@ -329,7 +321,6 @@ export default function DashboardClient() {
                 <Loader2 className="w-12 h-12 animate-spin text-[#2563eb] mb-6 mx-auto" />
                 <h2 className="text-2xl font-bold text-[#1e3a5f] mb-4">Building Adaptive Test</h2>
                 
-                {/* 🚀 REAL-TIME PROGRESS BAR UI */}
                 <div className="w-full bg-gray-100 rounded-full h-3 mb-4 overflow-hidden">
                   <motion.div 
                     className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full" 

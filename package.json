@@ -1,0 +1,7 @@
+{
+  "name": "looperdo-hostinger-router",
+  "scripts": {
+    "build": "cd looperdo_website/nextjs_space && npm install && npm run build",
+    "start": "cd looperdo_website/nextjs_space && npm run start"
+  }
+}
